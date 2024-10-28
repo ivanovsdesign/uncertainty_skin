@@ -5,6 +5,11 @@ __pycache__/
 
 # C extensions
 *.so
+clearml.sh 
+
+outputs/
+multirun/
+data/
 
 # Distribution / packaging
 .Python

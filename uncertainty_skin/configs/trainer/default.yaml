@@ -1,0 +1,4 @@
+max_epochs: 150
+callbacks:
+  - LearningRateMonitor
+  - ModelCheckpoint

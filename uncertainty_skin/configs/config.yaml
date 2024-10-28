@@ -1,0 +1,4 @@
+defaults:
+  - dataset: isic_balanced
+  - model: cnn
+  - trainer: default

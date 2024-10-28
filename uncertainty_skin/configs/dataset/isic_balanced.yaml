@@ -1,0 +1,12 @@
+name: isic_balanced
+path: /repo/uncertainty_skin/data/isic_balanced/images
+annotations_path: /repo/uncertainty_skin/data/isic_balanced/dataset.csv
+target_name: target
+class_names: [benign, malignant]
+train_size: 0.7
+val_size: 0.15
+test_size: 0.15
+seed: 42
+bagging: True
+bagging_size: 10000
+num_tta: 10

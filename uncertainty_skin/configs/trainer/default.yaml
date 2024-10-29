@@ -1,4 +1,2 @@
 max_epochs: 150
-callbacks:
-  - LearningRateMonitor
-  - ModelCheckpoint
+checkpoint_path: "checkpoints/"

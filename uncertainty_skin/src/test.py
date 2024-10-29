@@ -12,19 +12,29 @@ import pandas as pd
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay, f1_score, precision_score, recall_score, accuracy_score, roc_auc_score
 import matplotlib.pyplot as plt
 
-@hydra.main(config_path="../configs", config_name="config")
+import os
+
+from clearml import InputModel
+
+@hydra.main(config_path="/repo/uncertainty_skin/uncertainty_skin/configs", config_name="config")
 def test(config: DictConfig):
     set_seed(config.dataset.seed)
+    
     data_module = ISICDataModule(config.dataset)
-    if config.model.name == 'CNN':
-        model = CNN.load_from_checkpoint(config.model.checkpoint_path, config=config.model)
-    elif config.model.name.startswith('timm'):
-        model = TimmModel.load_from_checkpoint(config.model.checkpoint_path, config=config.model)
-    else:
-        raise ValueError(f"Unknown model: {config.model.name}")
+    data_module.setup()
+ 
+    try:
+        if config.model.name == 'CNN':
+            model = CNN.load_from_checkpoint(config.model.checkpoint_path, config=config.model)
+        elif config.model.name.startswith('timm'):
+            model = TimmModel.load_from_checkpoint(config.model.checkpoint_path, config=config.model)
+        else:
+            raise ValueError(f"Unknown model: {config.model.name}")
+    except: 
+        print(f'You should provide checkpoint path')
 
     logger = ClearMLLogger(project_name="ISIC_2024", task_name=f"{config.model.name}_testing")
-    trainer = pl.Trainer(**config.trainer, logger=logger)
+    trainer = pl.Trainer(logger=logger)
 
     # Perform TTA
     num_tta = config.dataset.num_tta

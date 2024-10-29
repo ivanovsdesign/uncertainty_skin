@@ -2,6 +2,13 @@ name: CNN
 num_classes: 2
 pretrained: True
 loss_fun: TM+UANLL
+weight: 0.9
+label_smoothing: 0.1
 lr: 0.0001
-optimizer: Adam
-weight_decay: 1e-4
+
+checkpoint_path: '/repo/uncertainty_skin/outputs/2024-10-29/14-46-14/checkpoints/CNN_42_53a7e21d-38c7-4718-8d55-6c8d42f88699epoch=0.ckpt'
+
+optimizer_name: Adam
+
+optimizer_hparams:
+  weight_decay: 1e-4

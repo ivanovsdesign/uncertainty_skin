@@ -15,10 +15,10 @@ import os
 import uuid
 
 def create_model(config):
-    if config.name == 'CNN':
-        model = CNN(config)
-    elif config.name in ['resnet50']:
-        model = TimmModel(config)
+    if config.model.name == 'CNN':
+        model = CNN(config.model)
+    elif config.model.name in config.timm_models:
+        model = TimmModel(config.model)
     else:
         raise ValueError(f"Unknown model: {config.name}")
     
@@ -33,11 +33,11 @@ def train(config: DictConfig):
     os.makedirs(config.trainer.checkpoint_path)
 
     data_module = ISICDataModule(config.dataset)
-    model = create_model(config.model)
+    model = create_model(config)
 
     checkpoint_callback = ModelCheckpoint(
             save_weights_only=True, mode="min", monitor="val_loss", dirpath=config.trainer.checkpoint_path,
-            filename=f'{config.model.name}_{config.dataset.seed}_{unique_id}' + '{epoch}'
+            filename=f'{config.model.name}_{config.dataset.seed}_{config.model.loss_fun}_{unique_id}_' + '{epoch}'
         )
 
     callbacks=[
@@ -46,7 +46,7 @@ def train(config: DictConfig):
     ]
 
     logger = ClearMLLogger(project_name="ISIC_2024",
-                           task_name=f"{config.model.name}_{config.dataset.seed}_training_{unique_id}",
+                           task_name=f"{config.model.name}_{config.dataset.seed}_{config.model.loss_fun}_training_{unique_id}",
                            offline=config.offline)
     trainer = pl.Trainer(max_epochs=config.trainer.max_epochs, logger=logger, callbacks=callbacks)
     trainer.fit(model, data_module)

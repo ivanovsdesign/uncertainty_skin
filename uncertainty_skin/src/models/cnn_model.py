@@ -6,7 +6,11 @@ class CNN(BaseModel):
     def build_model(self):
         
         input_channel=self.config.input_channel
-        n_outputs=self.config.num_classes
+        if self.config.loss_fun == 'TM+UANLL':
+            n_outputs=self.config.num_classes + 1
+        else:
+            n_outputs=self.config.num_classes
+
         dropout_rate=self.config.dropout_rate
         top_bn=self.config.top_bn
 

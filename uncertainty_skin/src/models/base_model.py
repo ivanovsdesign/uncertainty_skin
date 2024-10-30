@@ -15,6 +15,9 @@ class BaseModel(pl.LightningModule):
         self.loss_fun, self.loss_module_1 = self.build_loss()
         self.mining_func = miners.TripletMarginMiner(margin=0.2, distance=distances.CosineSimilarity(), type_of_triplets="semihard")
 
+        self.epoch_val_loss = []
+        self.epoch_train_loss = []
+
     def build_model(self):
         raise NotImplementedError
 
@@ -72,8 +75,8 @@ class BaseModel(pl.LightningModule):
             acc = (preds.argmax(dim=-1) == y).float().mean()
         else:
             acc = (embeddings[:, :self.config.num_classes].argmax(dim=-1) == y).float().mean()
-        self.log("train_loss", loss.float())
-        self.log("train_acc", acc)
+        self.log("train_loss", loss.float(), on_epoch=True)
+        self.log("train_acc", acc, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -86,8 +89,8 @@ class BaseModel(pl.LightningModule):
             acc = (preds.argmax(dim=-1) == y).float().mean()
         else:
             acc = (embeddings[:, :self.config.num_classes].argmax(dim=-1) == y).float().mean()
-        self.log("val_loss", loss.float())
-        self.log("val_acc", acc)
+        self.log("val_loss", loss.float(), on_epoch=True)
+        self.log("val_acc", acc, on_epoch=True)
 
     def test_step(self, batch, batch_idx):
         x, y = batch
@@ -98,4 +101,4 @@ class BaseModel(pl.LightningModule):
         else:
             acc = (embeddings[:, :self.config.num_classes].argmax(dim=-1) == y).float().mean()
         print("Test set accuracy (Precision@1) = {}".format(acc))
-        self.log("test_acc", acc)
+        self.log("test_acc", acc, on_epoch=True)

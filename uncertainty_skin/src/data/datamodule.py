@@ -10,7 +10,7 @@ class ISICDataModule(pl.LightningDataModule):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.dataframe = pd.read_csv(config.annotations_path, index_col=2)
+        self.dataframe = pd.read_csv(config.annotations_path)
         self.dataframe['path'] = config.path
         self.dataframe['target_name'] = config.target_name
         self.transform = {
@@ -40,7 +40,7 @@ class ISICDataModule(pl.LightningDataModule):
 
     def setup(self, stage=None):
         if self.config.bagging:
-            self.dataframe = self.dataframe.sample(n=self.config.bagging_size, random_state=self.config.seed)
+            self.dataframe = self.dataframe.sample(n=self.config.bagging_size, replace=True, random_state=self.config.seed).reset_index()
         train_val_df, test_df = train_test_split(self.dataframe, test_size=self.config.test_size, random_state=self.config.seed)
         train_df, val_df = train_test_split(train_val_df, test_size=self.config.val_size / (self.config.train_size + self.config.val_size), random_state=self.config.seed)
         self.train_dataset = CustomImageDataset(train_df, self.config.path, self.transform['train'])

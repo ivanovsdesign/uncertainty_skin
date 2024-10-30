@@ -3,5 +3,7 @@ defaults:
   - model: cnn
   - trainer: default
 
+device: "cuda"
+
 offline: False
 clearml_model_id: a65ecaf5e7644d8398383cfc67385ad6

@@ -17,7 +17,7 @@ import uuid
 def create_model(config):
     if config.name == 'CNN':
         model = CNN(config)
-    elif config.name.startswith('timm'):
+    elif config.name in ['resnet50']:
         model = TimmModel(config)
     else:
         raise ValueError(f"Unknown model: {config.name}")

@@ -5,6 +5,8 @@ from pytorch_metric_learning import distances, losses, miners, reducers, testers
 
 from src.functional.criterion import UANLLloss
 
+import torch
+
 class BaseModel(pl.LightningModule):
     def __init__(self, config):
         super().__init__()
@@ -30,7 +32,7 @@ class BaseModel(pl.LightningModule):
             reducer = reducers.ThresholdReducer(low=0)
             eRegularizer = regularizers.LpRegularizer()
             loss_fun = losses.TripletMarginLoss(margin=1.2, distance=distance, reducer=reducer, embedding_regularizer=eRegularizer)
-            loss_module_1 = nn.CrossEntropyLoss(label_smoothing=self.config.label_smoothing, weight=self.config.weights)
+            loss_module_1 = nn.CrossEntropyLoss(label_smoothing=self.config.label_smoothing)
             print('CE loss is an additional loss term (module 1)')
         else:
             raise ValueError(f"Unknown loss function: {self.config.loss_fun}")

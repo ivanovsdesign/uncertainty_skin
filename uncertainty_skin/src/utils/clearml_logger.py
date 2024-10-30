@@ -28,7 +28,8 @@ class ClearMLLogger(Logger):
         self._task.connect(params)
 
     def log_metrics(self, metrics, step=None):
-        self._task.get_logger().report_scalar(title='Metrics', series=list(metrics.keys())[0], value=list(metrics.values())[0], iteration=step)
+        for key, value in metrics.items():
+            self._task.get_logger().report_scalar(title='Metrics', series=key, value=value, iteration=step)
     
     def name(self):
         return "ClearMLLogger"

@@ -25,9 +25,9 @@ def test(config: DictConfig):
  
     try:
         if config.model.name == 'CNN':
-            model = CNN.load_from_checkpoint(config.model.checkpoint_path, config=config.model)
+            model = CNN.load_from_checkpoint(config.model.checkpoint_path, config=config.model).to(config.device)
         elif config.model.name.startswith('timm'):
-            model = TimmModel.load_from_checkpoint(config.model.checkpoint_path, config=config.model)
+            model = TimmModel.load_from_checkpoint(config.model.checkpoint_path, config=config.model).to(config.device)
         else:
             raise ValueError(f"Unknown model: {config.model.name}")
     except: 
@@ -43,7 +43,24 @@ def test(config: DictConfig):
     test_certainties_s_tta = []
     test_confidences_s_tta = []
     for _ in range(num_tta):
-        test_predictions, test_labels, test_certainties_s, test_confidences_s = trainer.predict(model, data_module.test_dataloader())
+        test_predictions, test_labels, test_certainties_s, test_confidences_s = [], [], [], []
+        for batch in data_module.test_dataloader():
+            inputs, labels = batch
+            inputs = inputs.to(model.device)  # Move inputs to the same device as the model
+            outputs = model(inputs)
+            preds = torch.softmax(outputs[:, :config.model.num_classes], dim=1)
+            certainties_s = torch.exp(-outputs[:, config.model.num_classes:])
+            confidences_s = preds.max(dim=1).values
+            test_predictions.append(preds)
+            test_labels.append(labels)
+            test_certainties_s.append(certainties_s)
+            test_confidences_s.append(confidences_s)
+
+        test_predictions = torch.cat(test_predictions)
+        test_labels = torch.cat(test_labels)
+        test_certainties_s = torch.cat(test_certainties_s)
+        test_confidences_s = torch.cat(test_confidences_s)
+
         test_predictions_tta.append(test_predictions)
         test_labels_tta.append(test_labels)
         test_certainties_s_tta.append(test_certainties_s)
@@ -55,8 +72,8 @@ def test(config: DictConfig):
     test_certainties_s_tta = torch.stack(test_certainties_s_tta).mean(dim=0)
     test_confidences_s_tta = torch.stack(test_confidences_s_tta).mean(dim=0)
 
-    test_predictions_tta = test_predictions_tta.argmax(dim=1)
-    test_labels_tta = test_labels_tta.squeeze()
+    test_predictions_tta = test_predictions_tta.argmax(dim=1).cpu()  # Move to CPU
+    test_labels_tta = test_labels_tta.squeeze().cpu()  # Move to CPU
 
     accuracy = accuracy_score(test_labels_tta, test_predictions_tta)
     f1 = f1_score(test_labels_tta, test_predictions_tta, average='weighted')
@@ -76,8 +93,8 @@ def test(config: DictConfig):
     predictions_df = pd.DataFrame({
         'true_labels': test_labels_tta.tolist(),
         'predictions': test_predictions_tta.tolist(),
-        'certainties_s': test_certainties_s_tta.tolist(),
-        'confidences_s': test_confidences_s_tta.tolist()
+        'certainties_s': test_certainties_s_tta.cpu().tolist(),  # Move to CPU
+        'confidences_s': test_confidences_s_tta.cpu().tolist()  # Move to CPU
     })
     predictions_df.to_csv(f"{config.model.name}_predictions.csv", index=False)
 

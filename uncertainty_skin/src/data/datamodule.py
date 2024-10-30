@@ -59,7 +59,3 @@ class ISICDataModule(pl.LightningDataModule):
             return DataLoader(self.test_tta_dataset, batch_size=self.config.batch_size, num_workers=self.config.num_workers)
         else:
             return DataLoader(self.test_dataset, batch_size=self.config.batch_size, num_workers=self.config.num_workers)
-
-    
-    def test_tta_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.config.batch_size, num_workers=self.config.num_workers)

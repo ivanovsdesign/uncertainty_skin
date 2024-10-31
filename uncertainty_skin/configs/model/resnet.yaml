@@ -11,7 +11,7 @@ weight: 0.9
 label_smoothing: 0.1
 lr: 0.0001
 
-checkpoint_path: '/repo/uncertainty_skin/outputs/2024-10-29/14-46-14/checkpoints/CNN_42_53a7e21d-38c7-4718-8d55-6c8d42f88699epoch=0.ckpt'
+checkpoint_path: '/repo/uncertainty_skin/outputs/2024-10-30/15-40-48/checkpoints/resnet50_42_TM+UANLL_48fb9827-4fc4-4e19-a9b6-42655d3dbc16_epoch=11.ckpt'
 
 optimizer_name: Adam
 

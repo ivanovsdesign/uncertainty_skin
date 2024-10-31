@@ -6,14 +6,13 @@ from src.models.cnn_model import CNN
 from src.models.timm_model import TimmModel
 from src.utils.clearml_logger import ClearMLLogger
 from src.utils.utils import set_seed
-from src.utils.metrics import calculate_ece, calculate_accuracy, calculate_f1_score_binary, certain_predictions, accuracy_tta, test_vis, test_vis_tta, ttac, ttaWeightedPred, hist
 import torch
 import numpy as np
 import pandas as pd
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay, f1_score, precision_score, recall_score, accuracy_score, roc_auc_score
 import matplotlib.pyplot as plt
 
-@hydra.main(config_path="../configs", config_name="config")
+@hydra.main(config_path="configs", config_name="config")
 def test(config: DictConfig):
     set_seed(config.dataset.seed)
     data_module = ISICDataModule(config.dataset)
@@ -150,7 +149,7 @@ def test(config: DictConfig):
         'Acc TTAM': accuracy_tta(mode_labels, mode_predictions)['acc_without_u'],
         'Acc TTAWCo-S': accuracy_TTAWCo_S,
         'Acc TTAWCe-S': accuracy_TTAWCe_S,
-        'ECE': calculate_ece(test_predictions_tta, test_labels_tta, num_classes=config.model.num_classes)
+        'ECE': ECE
     }
 
     summary_df = pd.DataFrame([test_accuracy_summary])

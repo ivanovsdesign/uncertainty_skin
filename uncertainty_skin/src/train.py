@@ -60,5 +60,8 @@ def train(config: DictConfig):
     print('Model saved')
     os.environ['TRAINED_MODEL'] = save_path
 
+    with open(f'{os.path.join(os.getcwd(), 'trained_paths.csv')}', 'w') as file:
+        file.write(f'{config.dataset.seed}, {config.model.name}, {trainer.checkpoint_callback.best_model_path}')
+
 if __name__ == "__main__":
     train()

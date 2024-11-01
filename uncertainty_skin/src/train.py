@@ -30,13 +30,13 @@ def train(config: DictConfig):
 
     unique_id = uuid.uuid4()
 
-    os.makedirs(config.trainer.checkpoint_path)
+    os.makedirs('checkpoints')
 
     data_module = ISICDataModule(config.dataset)
     model = create_model(config)
 
     checkpoint_callback = ModelCheckpoint(
-            save_weights_only=True, mode="min", monitor="val_loss", dirpath=config.trainer.checkpoint_path,
+            save_weights_only=True, mode="min", monitor="val_loss", dirpath='checkpoints/',
             filename=f'{config.model.name}_{config.dataset.seed}_{config.model.loss_fun}_{unique_id}_' + '{epoch}'
         )
 

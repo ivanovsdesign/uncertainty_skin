@@ -2,6 +2,7 @@
 model:
   name: 'CNN'
   loss_fun: 'TM+UANLL'
+  checkpoint_path: '/repo/uncertainty_skin/outputs/2024-11-01/09-06-30/checkpoints/CNN_42_TM+UANLL_ea3352f3-64aa-456c-8c97-12281b411a7b_epoch=0.ckpt'
 
 dataset:
   img_size: 32

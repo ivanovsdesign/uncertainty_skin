@@ -4,7 +4,7 @@ import torchvision
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-
+import pandas as pd
 
 def imshow(inp, title):
     """Imshow for Tensor."""
@@ -94,14 +94,13 @@ def calculate_f1_score_binary(preds, labels):
         'balanced_accuracy': b_acc,
     }
 
-def certain_predictions(x, probv, tr, nc, loss_fun):
+def certain_predictions(x, probv, nc, loss_fun):
     """
     Calculate certainty and confidence predictions.
 
     Args:
         x (torch.Tensor): Model outputs.
         probv (torch.Tensor): Maximum probabilities.
-        tr (list): Thresholds for confidence and certainty.
         nc (int): Number of classes.
         loss_fun (str): Loss function type.
 
@@ -120,14 +119,10 @@ def certain_predictions(x, probv, tr, nc, loss_fun):
         confidence_s = probv
         certainty_s = torch.zeros_like(confidence_s)
 
-    confidence_h = (confidence_s > tr[0]) * 1
-    certainty_h = (certainty_s > tr[1]) * 1
 
     return {
         'confidence_s': confidence_s,
-        'confidence_h': confidence_h,
         'certainty_s': certainty_s,
-        'certainty_h': certainty_h,
     }
 
 def accuracy_tta(labels, pred, values_h=None):
@@ -164,14 +159,13 @@ def accuracy_tta(labels, pred, values_h=None):
             'acc_with_u': acc_with_u,
         }
 
-def test_vis(model, loader, tr, device, nc):
+def test_vis(model, loader, device, nc, loss_fun):
     """
     Visualize test set predictions.
 
     Args:
         model (torch.nn.Module): Model to use for predictions.
         loader (torch.utils.data.DataLoader): DataLoader for the test set.
-        tr (list): Thresholds for confidence and certainty.
         device (torch.device): Device to use for computation.
         nc (int): Number of classes.
 
@@ -183,9 +177,7 @@ def test_vis(model, loader, tr, device, nc):
     test_prob_comp = []
     test_labe = []
     test_cert_s = []
-    test_cert_h = []
     test_conf_s = []
-    test_conf_h = []
     test_X = []
 
     with torch.no_grad():
@@ -202,20 +194,16 @@ def test_vis(model, loader, tr, device, nc):
             test_labe.append(labels)
             test_X.append(inputs)
 
-            cert_attr = certain_predictions(x, probv, tr, nc, model.loss_fun)
+            cert_attr = certain_predictions(x, probv, nc, loss_fun)
             test_cert_s.append(cert_attr['certainty_s'])
-            test_cert_h.append(cert_attr['certainty_h'])
             test_conf_s.append(cert_attr['confidence_s'])
-            test_conf_h.append(cert_attr['confidence_h'])
 
     test_labels = torch.cat(test_labe, dim=0)
     test_predictions = torch.cat(test_pred, dim=0)
     test_prob_complete = torch.cat(test_prob_comp, dim=0)
     test_inputs = torch.cat(test_X, dim=0)
     test_certainties_s = torch.cat(test_cert_s, dim=0)
-    test_certainties_h = torch.cat(test_cert_h, dim=0)
     test_confidences_s = torch.cat(test_conf_s, dim=0)
-    test_confidences_h = torch.cat(test_conf_h, dim=0)
 
     ece = calculate_ece(test_prob_complete, test_labels, num_classes=nc)
     accu = calculate_accuracy(test_predictions, test_labels)
@@ -227,9 +215,7 @@ def test_vis(model, loader, tr, device, nc):
         'test_labels': test_labels.cpu().numpy(),
         'test_predictions': test_predictions.cpu().numpy(),
         'test_certainties_s': test_certainties_s.cpu().numpy(),
-        'test_certainties_h': test_certainties_h.cpu().numpy(),
         'test_confidences_s': test_confidences_s.cpu().numpy(),
-        'test_confidences_h': test_confidences_h.cpu().numpy(),
         'ECE': ece,
         'acc': accu,
         'balanced_acc': b_acc,
@@ -238,14 +224,13 @@ def test_vis(model, loader, tr, device, nc):
 
     return test_inputs, pd.DataFrame(data=test_attr)
 
-def test_vis_tta(model, loader, tr, figs=3, fSize=(8, 8), nSamples=4, device='cuda', numTTA=10):
+def test_vis_tta(model, loader, num_classes, loss_fun, figs=3, fSize=(8, 8), nSamples=4, device='cuda', numTTA=10):
     """
     Perform test-time augmentation (TTA) and visualize test set predictions.
 
     Args:
         model (torch.nn.Module): Model to use for predictions.
         loader (torch.utils.data.DataLoader): DataLoader for the test set.
-        tr (list): Thresholds for confidence and certainty.
         figs (int): Number of figures to plot.
         fSize (tuple): Figure size.
         nSamples (int): Number of samples to visualize.
@@ -258,12 +243,10 @@ def test_vis_tta(model, loader, tr, figs=3, fSize=(8, 8), nSamples=4, device='cu
     test_labels_tta = []
     test_predictions_tta = []
     test_certainties_s_tta = []
-    test_certainties_h_tta = []
     test_confidences_s_tta = []
-    test_confidences_h_tta = []
 
     for i in range(numTTA):
-        test_inputs, test_attr = test_vis(model.to(device), loader, tr, device, model.config.num_classes)
+        test_inputs, test_attr = test_vis(model.to(device), loader, device, num_classes, loss_fun)
         if i < figs:
             out = torchvision.utils.make_grid(test_inputs[:nSamples].cpu(), nrow=4)
             fig = plt.figure(figsize=fSize)
@@ -271,25 +254,19 @@ def test_vis_tta(model, loader, tr, figs=3, fSize=(8, 8), nSamples=4, device='cu
         test_labels_tta.append(test_attr['test_labels'])
         test_predictions_tta.append(test_attr['test_predictions'])
         test_certainties_s_tta.append(test_attr['test_certainties_s'])
-        test_certainties_h_tta.append(test_attr['test_certainties_h'])
         test_confidences_s_tta.append(test_attr['test_confidences_s'])
-        test_confidences_h_tta.append(test_attr['test_confidences_h'])
         del test_attr
 
     labels_tta = torch.as_tensor(test_labels_tta)
     predictions_tta = torch.as_tensor(test_predictions_tta)
     certainties_s_tta = torch.as_tensor(test_certainties_s_tta)
-    certainties_h_tta = torch.as_tensor(test_certainties_h_tta)
     confidences_s_tta = torch.as_tensor(test_confidences_s_tta)
-    confidences_h_tta = torch.as_tensor(test_confidences_h_tta)
 
     return {
         'labels_tta': labels_tta,
         'predictions_tta': predictions_tta,
         'certainties_s_tta': certainties_s_tta,
-        'certainties_h_tta': certainties_h_tta,
         'confidences_s_tta': confidences_s_tta,
-        'confidences_h_tta': confidences_h_tta,
     }
 
 def ttac(mode_template, predictions_tta, values_tta, labels, class_names):
@@ -313,12 +290,12 @@ def ttac(mode_template, predictions_tta, values_tta, labels, class_names):
         ttaw = values_tta[:, i]
         freq_w = torch.bincount(ttap, weights=ttaw)
         _, predictions_w[i] = torch.max(freq_w, 0)
-        if i < nSamples:
+        if i < 4:
             print(ttap, ttaw, predictions_w[i].item(), labels[i].item(),
                   class_names[predictions_w[i].item()], class_names[labels[i].item()])
     return predictions_w
 
-def ttaWeightedPred(labels_tta, predictions_tta, confidences_tta, certainties_tta, config):
+def ttaWeightedPred(labels_tta, predictions_tta, confidences_tta, certainties_tta, num_classes):
     """
     Calculate weighted predictions based on TTA.
 
@@ -334,8 +311,8 @@ def ttaWeightedPred(labels_tta, predictions_tta, confidences_tta, certainties_tt
     mode_labels, _ = torch.mode(labels_tta, dim=0)
     mode_template = torch.zeros_like(mode_labels)
 
-    predictionsCo = ttac(mode_template, predictions_tta, confidences_tta, mode_labels, config.model.num_classes)
-    predictionsCe = ttac(mode_template, predictions_tta, certainties_tta, mode_labels, config.model.num_classes)
+    predictionsCo = ttac(mode_template, predictions_tta, confidences_tta, mode_labels, num_classes)
+    predictionsCe = ttac(mode_template, predictions_tta, certainties_tta, mode_labels, num_classes)
 
     return {
         'predictionsCo': predictionsCo,

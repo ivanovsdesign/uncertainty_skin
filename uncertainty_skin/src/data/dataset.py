@@ -3,7 +3,7 @@ from PIL import Image
 
 class CustomImageDataset(Dataset):
     def __init__(self, dataframe, images_path, transform=None):
-        self.dataframe = dataframe.reset_index()
+        self.dataframe = dataframe.reset_index(drop=True)
         self.transform = transform
         self.images_path = images_path
 

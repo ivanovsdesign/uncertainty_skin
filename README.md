@@ -1,20 +1,74 @@
-# Introduction 
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
+# 🟤⚪️ Uncertainty in Skin Lesion Classification
 
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
+Welcome to the Uncertainty in Skin Lesion Classification project! This repository contains the code and configurations to run experiments on skin lesion classification with uncertainty estimation.
 
-# Build and Test
-TODO: Describe and show how to build your code and run the tests. 
+## 📋 Table of Contents
 
-# Contribute
-TODO: Explain how other users and developers can contribute to make your code better. 
+- [Overview](#overview)
+- [Setup](#setup)
+- [Running Experiments](#running-experiments)
+- [Results](#results)
+- [Contributing](#contributing)
+- [License](#license)
 
-If you want to learn more about creating good readme files then refer the following [guidelines](https://docs.microsoft.com/en-us/azure/devops/repos/git/create-a-readme?view=azure-devops). You can also seek inspiration from the below readme files:
-- [ASP.NET Core](https://github.com/aspnet/Home)
-- [Visual Studio Code](https://github.com/Microsoft/vscode)
-- [Chakra Core](https://github.com/Microsoft/ChakraCore)
+## 🌟 Overview
+
+This project focuses on classifying skin lesions as benign or malignant using deep learning models. We incorporate uncertainty estimation techniques to improve the robustness and reliability of the predictions. The experiments are configured to run with different models and loss functions, such as:
+
+- **TM+UANLL CNN**: Triplet margin loss with uncertainty-aware negative log-likelihood loss using a CNN model.
+- **TM+UANLL ResNet**: Triplet margin loss with uncertainty-aware negative log-likelihood loss using a ResNet model.
+
+## 🛠️ Setup
+
+To set up the environment for running the experiments, follow these steps:
+
+1. **Clone the Repository**:
+   ```bash
+   git clone ...
+   cd uncertainty_skin
+   ```
+
+2. **Install Dependencies**:
+
+    Conda will automatically create environment with python 3.12.4.
+
+    Run the setup script to install the required dependencies:
+
+    ```bash
+    ./setup.sh
+    ```
+
+    The setup.sh script will create a virtual environment, install the necessary packages, and configure the environment for the experiments.
+
+## 🚀 Running Experiments:
+
+To run the experiments, use the following command:
+
+```bash
+python main_train.py +experiment=<experiment_name>
+```
+Replace <experiment_name> with one of the following:
+
+- tm_uanll_cnn: Experiment with Triplet Margin + UANLL loss using a CNN model.
+
+- tm_uanll_resnet: Experiment with Triplet Margin + UANLL loss using a ResNet model.
+
+For example, to run the experiment with the CNN model:
+
+```bash
+python main_train.py +experiment=tm_uanll_cnn
+```
+## 📊 Results
+After running the experiments, the results will be saved in the results directory. The results include:
+
+- Predictions: CSV files containing the true labels, predicted labels, and uncertainty estimates.
+
+- Metrics: CSV files containing the accuracy, F1 score, and other metrics.
+
+- Confusion Matrices: Visualizations of the confusion matrices for the test set.
+
+## 🤝 Contributing
+Contributions are welcome! If you find any issues or have suggestions for improvements, please open an issue or submit a pull request.
+
+## 📄 License
+This project is licensed under the MIT License. See the LICENSE file for details.

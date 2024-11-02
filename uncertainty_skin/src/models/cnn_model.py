@@ -5,14 +5,14 @@ import torch.nn.functional as F
 class CNN(BaseModel):
     def build_model(self):
         
-        input_channel=self.config.input_channel
-        if self.config.loss_fun == 'TM+UANLL':
-            n_outputs=self.config.num_classes + 1
+        input_channel=self.config.model.input_channel
+        if self.config.model.loss_fun == 'TM+UANLL':
+            n_outputs=self.config.model.num_classes + 1
         else:
-            n_outputs=self.config.num_classes
+            n_outputs=self.config.model.num_classes
 
-        dropout_rate=self.config.dropout_rate
-        top_bn=self.config.top_bn
+        dropout_rate=self.config.model.dropout_rate
+        top_bn=self.config.model.top_bn
 
         self.dropout_rate = dropout_rate
         self.top_bn = top_bn
@@ -57,7 +57,7 @@ class CNN(BaseModel):
         h=self.c6(h)
         h=F.leaky_relu(self.call_bn(self.bn6, h), negative_slope=0.01)
         h=F.max_pool2d(h, kernel_size=2, stride=2)
-        h=F.dropout2d(h, p=self.config.dropout_rate)
+        h=F.dropout2d(h, p=self.config.model.dropout_rate)
 
         h=self.c7(h)
         h=F.leaky_relu(self.call_bn(self.bn7, h), negative_slope=0.01)

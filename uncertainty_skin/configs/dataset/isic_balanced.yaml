@@ -15,6 +15,6 @@ val_size: 0.15
 test_size: 0.15
 seed: 42
 bagging: True
-bagging_size: 10000
+bagging_size: 15000
 num_tta: 10
 

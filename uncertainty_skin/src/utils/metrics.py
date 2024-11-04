@@ -17,7 +17,7 @@ def imshow(inp, title):
     plt.title(title)
     plt.show()
 
-def hist(df, values, histSize):
+def hist(df, values, histSize, name):
     sns.set(style="darkgrid")
     sns.set(rc={'figure.figsize': histSize})
 
@@ -28,7 +28,7 @@ def hist(df, values, histSize):
     sns.histplot(data=df[df['True or false prediction'] == False],x = values, color="red",     
                  label='False predictions', bins=n, kde=True)
     plt.legend()
-    return
+    plt.savefig(f'hist_{name}.png')
 
 def calculate_ece(probabilities, labels, num_classes=2, n_bins=32, norm='l1'):
     """
@@ -289,13 +289,14 @@ def ttac(mode_template, predictions_tta, values_tta, labels, class_names):
         ttap = predictions_tta[:, i]
         ttaw = values_tta[:, i]
         freq_w = torch.bincount(ttap, weights=ttaw)
+        print(f'freq_w: {freq_w}')
         _, predictions_w[i] = torch.max(freq_w, 0)
         if i < 4:
             print(ttap, ttaw, predictions_w[i].item(), labels[i].item(),
                   class_names[predictions_w[i].item()], class_names[labels[i].item()])
     return predictions_w
 
-def ttaWeightedPred(labels_tta, predictions_tta, confidences_tta, certainties_tta, num_classes):
+def ttaWeightedPred(labels_tta, predictions_tta, confidences_tta, certainties_tta, class_names):
     """
     Calculate weighted predictions based on TTA.
 
@@ -311,8 +312,8 @@ def ttaWeightedPred(labels_tta, predictions_tta, confidences_tta, certainties_tt
     mode_labels, _ = torch.mode(labels_tta, dim=0)
     mode_template = torch.zeros_like(mode_labels)
 
-    predictionsCo = ttac(mode_template, predictions_tta, confidences_tta, mode_labels, num_classes)
-    predictionsCe = ttac(mode_template, predictions_tta, certainties_tta, mode_labels, num_classes)
+    predictionsCo = ttac(mode_template, predictions_tta, confidences_tta, mode_labels, class_names)
+    predictionsCe = ttac(mode_template, predictions_tta, certainties_tta, mode_labels, class_names)
 
     return {
         'predictionsCo': predictionsCo,

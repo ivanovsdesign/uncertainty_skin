@@ -13,6 +13,8 @@ import pandas as pd
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay, f1_score, precision_score, recall_score, accuracy_score, roc_auc_score
 import matplotlib.pyplot as plt
 
+from tqdm import tqdm
+
 class BaseModel(pl.LightningModule):
     def __init__(self, config):
         super().__init__()
@@ -44,7 +46,7 @@ class BaseModel(pl.LightningModule):
             loss_module_1 = nn.CrossEntropyLoss(label_smoothing=self.config.model.label_smoothing)
             print('CE loss is an additional loss term (module 1)')
         else:
-            raise ValueError(f"Unknown loss function: {self.config.loss_fun}")
+            raise ValueError(f"Unknown loss function: {self.config.model.loss_fun}")
         return loss_fun, loss_module_1
 
     def forward(self, x):
@@ -53,20 +55,20 @@ class BaseModel(pl.LightningModule):
     def lr_lambda(self,epoch,n=150,
               delay=30,stop_lr=0):
         n = self.config.trainer.max_epochs
-        start_lr = self.config.lr
+        start_lr = self.config.model.lr
         learning_rate = start_lr if epoch < delay else start_lr - (epoch - delay) * (start_lr - stop_lr) / (n - 1 - delay)
         return learning_rate / start_lr
 
     def configure_optimizers(self):
         # We will support Adam or SGD as optimizers.
-        if self.config.optimizer_name == "Adam":
+        if self.config.model.optimizer_name == "Adam":
             # AdamW is Adam with a correct implementation of weight decay (see here
             # for details: https://arxiv.org/pdf/1711.05101.pdf)
-            optimizer = optim.AdamW(self.parameters(), **self.config.optimizer_hparams)
-        elif self.config.optimizer == "SGD":
-            optimizer = optim.SGD(self.parameters(), **self.config.optimizer_hparams)
+            optimizer = optim.AdamW(self.parameters(), **self.config.model.optimizer_hparams)
+        elif self.config.model.optimizer_name == "SGD":
+            optimizer = optim.SGD(self.parameters(), **self.config.model.optimizer_hparams)
         else:
-            assert False, f'Unknown optimizer: "{self.config.optimizer_name}"'
+            assert False, f'Unknown optimizer: "{self.config.model.optimizer_name}"'
 
         # We will reduce the learning rate by 'gamma' after 'milestone' epochs
         scheduler = optim.lr_scheduler.LambdaLR(optimizer, self.lr_lambda)#MultiStepLR(optimizer, milestones=MILESTONES, gamma=GAMMA)
@@ -77,7 +79,7 @@ class BaseModel(pl.LightningModule):
         embeddings = self(x)
         indices_tuple = self.mining_func(embeddings[:, :self.config.model.num_classes], y)
         loss = self.loss_fun(embeddings[:, :self.config.model.num_classes], y, indices_tuple) + self.loss_module_1(embeddings, y)
-        if self.config.loss_fun == 'TM+CE':
+        if self.config.model.loss_fun == 'TM+CE':
             preds = nn.functional.softmax(embeddings[:, :self.config.model.num_classes], 1)
             acc = (preds.argmax(dim=-1) == y).float().mean()
         else:
@@ -91,7 +93,7 @@ class BaseModel(pl.LightningModule):
         embeddings = self(x)
         indices_tuple = self.mining_func(embeddings[:, :self.config.model.num_classes], y)
         loss = self.loss_fun(embeddings[:, :self.config.model.num_classes], y, indices_tuple) + self.loss_module_1(embeddings, y)
-        if self.config.loss_fun == 'TM+CE':
+        if self.config.model.loss_fun == 'TM+CE':
             preds = nn.functional.softmax(embeddings[:, :self.config.model.num_classes], 1)
             acc = (preds.argmax(dim=-1) == y).float().mean()
         else:
@@ -107,7 +109,7 @@ class BaseModel(pl.LightningModule):
             acc = (preds.argmax(dim=-1) == y).float().mean()
         else:
             acc = (embeddings[:, :self.config.model.num_classes].argmax(dim=-1) == y).float().mean()
-        print("Test set accuracy (Precision@1) = {}".format(acc))
+        print("Test set accuracy without TTA (Precision@1) = {}".format(acc))
         self.log("test_acc", acc, on_epoch=True)
 
     def on_test_epoch_end(self):
@@ -117,7 +119,7 @@ class BaseModel(pl.LightningModule):
         test_labels_tta = []
         test_certainties_s_tta = []
         test_confidences_s_tta = []
-        for _ in range(num_tta):
+        for _ in tqdm(range(num_tta), total=num_tta):
             test_predictions, test_labels, test_certainties_s, test_confidences_s = [], [], [], []
             for batch in self.trainer.datamodule.test_dataloader():
                 inputs, labels = batch
@@ -142,11 +144,14 @@ class BaseModel(pl.LightningModule):
             test_confidences_s_tta.append(test_confidences_s)
 
         # Collect and log metrics
+        
+        print('Collecting and logging metrics')
+        
         test_predictions_tta = torch.stack(test_predictions_tta).mean(dim=0)
         test_labels_tta = torch.stack(test_labels_tta).mode(dim=0).values
         test_certainties_s_tta = torch.stack(test_certainties_s_tta).mean(dim=0)
         test_confidences_s_tta = torch.stack(test_confidences_s_tta).mean(dim=0)
-
+        test_probs_tta = test_predictions_tta.squeeze().cpu()
         test_predictions_tta = test_predictions_tta.argmax(dim=1).cpu()  # Move to CPU
         test_labels_tta = test_labels_tta.squeeze().cpu()  # Move to CPU
 
@@ -168,10 +173,13 @@ class BaseModel(pl.LightningModule):
         predictions_df = pd.DataFrame({
             'true_labels': test_labels_tta.tolist(),
             'predictions': test_predictions_tta.tolist(),
+            'probabilities': test_probs_tta.tolist(),
             'certainties_s': test_certainties_s_tta.cpu().tolist(),  # Move to CPU
             'confidences_s': test_confidences_s_tta.cpu().tolist()  # Move to CPU
         })
         predictions_df.to_csv(f"{self.config.model.name}_predictions.csv", index=False)
+        
+        print('Performing visualization...')
 
         # Plot confusion matrix
         cm = confusion_matrix(test_labels_tta, test_predictions_tta)
@@ -208,9 +216,11 @@ class BaseModel(pl.LightningModule):
         cm = confusion_matrix(mode_labels.cpu(), mode_predictions.cpu())
         print('Mode based TTA predictions (TTAM)')
         cm_display = ConfusionMatrixDisplay(cm, display_labels=self.config.dataset.class_names).plot()
+        
+        print('Calculating weighted predictions...')
 
         # Weighted TTA predictions
-        weightedPred = ttaWeightedPred(test_attr_tta['labels_tta'], test_attr_tta['predictions_tta'], test_attr_tta['confidences_s_tta'], test_attr_tta['certainties_s_tta'], num_classes=self.config.model.num_classes)
+        weightedPred = ttaWeightedPred(test_attr_tta['labels_tta'], test_attr_tta['predictions_tta'], test_attr_tta['confidences_s_tta'], test_attr_tta['certainties_s_tta'], class_names = self.config.dataset.class_names)
         n_correct_TTAWCo_S = (weightedPred['predictionsCo'] == mode_labels).sum().item()
         n_correct_TTAWCe_S = (weightedPred['predictionsCe'] == mode_labels).sum().item()
 
@@ -231,6 +241,8 @@ class BaseModel(pl.LightningModule):
         # Summary table
         test_accuracy_summary = {
             'ID': self.logger._task.id,
+            'loss_fun': self.config.model.loss_fun,
+            'bagging_size': self.config.dataset.bagging_size,
             'seed': self.config.dataset.seed,
             '# samples': len(test_labels_tta),
             '# TTA': self.config.dataset.num_tta,
@@ -240,7 +252,7 @@ class BaseModel(pl.LightningModule):
             'Acc TTAM': accuracy_tta(mode_labels, mode_predictions)['acc_without_u'],
             'Acc TTAWCo-S': accuracy_TTAWCo_S,
             'Acc TTAWCe-S': accuracy_TTAWCe_S,
-            'ECE': calculate_ece(test_predictions_tta, test_labels_tta, num_classes=self.config.model.num_classes)
+            'ECE': calculate_ece(test_probs_tta, test_labels_tta, num_classes=self.config.model.num_classes)
         }
 
         summary_df = pd.DataFrame([test_accuracy_summary])

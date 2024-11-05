@@ -257,10 +257,3 @@ class BaseModel(pl.LightningModule):
 
         summary_df = pd.DataFrame([test_accuracy_summary])
         summary_df.to_csv(f"{self.config.model.name}_summary.csv", index=False)
-
-        # Calculate std/error for metrics across seeds
-        # Assuming you have a list of summary dataframes from different seeds
-        # summary_dfs = [summary_df1, summary_df2, ...]
-        # combined_summary_df = pd.concat(summary_dfs)
-        # metrics_std = combined_summary_df.std()
-        # metrics_error = combined_summary_df.sem()

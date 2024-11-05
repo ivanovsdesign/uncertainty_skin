@@ -11,15 +11,25 @@ handle_error() {
     exit 1
 }
 
-# Create the Conda environment
-echo "Creating Conda environment..."
-conda create -n $ENV_NAME python=$PYTHON_VERSION -y
+
+# Check if the environment already exists
+if conda env list | grep -q "^$ENV_NAME\s"; then
+    echo "Environment $ENV_NAME already exists. Activating it..."
+else
+    # Create the Conda environment
+    echo "Creating Conda environment..."
+    conda create -n $ENV_NAME python=$PYTHON_VERSION -y || handle_error "Failed to create environment $ENV_NAME." && conda activate $ENV_NAME
+fi
 
 # Activate the environment
 echo "Activating the environment..."
 conda activate $ENV_NAME || handle_error "Failed to activate environment $ENV_NAME."
 
 echo "Installing requirements..."
+
+echo "Installing torch and torchvision..."
+conda install -y pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
+
 pip install -r requirements.txt || handle_error "Failed to install requirements\n Try to install manually."
 
 # Verify the environment was created and activated

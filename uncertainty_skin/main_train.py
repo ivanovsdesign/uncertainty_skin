@@ -11,13 +11,14 @@ def main(config: DictConfig):
     
     unique_id = uuid.uuid4()
     
+    seed = config.dataset.seed
+    
     logger = ClearMLLogger(
         project_name="ISIC_2024",
         task_name=f"{config.model.name}_{seed}_{config.model.loss_fun}_training_{unique_id}",
         offline=config.offline
     )
-    
-    seed = config.dataset.seed
+
     
     train(config = config,
           seed = seed,

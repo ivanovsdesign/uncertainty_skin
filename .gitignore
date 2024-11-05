@@ -10,6 +10,8 @@ clearml.sh
 outputs/
 multirun/
 
+checkpoints/
+
 # Distribution / packaging
 .Python
 build/

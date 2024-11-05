@@ -15,9 +15,13 @@ def imshow(inp, title):
     plt.axis('off')
     plt.imshow(inp)
     plt.title(title)
-    plt.show()
+    plt.savefig(f'{title}.png')
+    plt.close()
 
 def hist(df, values, histSize, name):
+    
+    plt.figure(figsize=(8,8))
+    
     sns.set(style="darkgrid")
     sns.set(rc={'figure.figsize': histSize})
 
@@ -29,6 +33,7 @@ def hist(df, values, histSize, name):
                  label='False predictions', bins=n, kde=True)
     plt.legend()
     plt.savefig(f'hist_{name}.png')
+    plt.close()
 
 def calculate_ece(probabilities, labels, num_classes=2, n_bins=32, norm='l1'):
     """
@@ -289,7 +294,6 @@ def ttac(mode_template, predictions_tta, values_tta, labels, class_names):
         ttap = predictions_tta[:, i]
         ttaw = values_tta[:, i]
         freq_w = torch.bincount(ttap, weights=ttaw)
-        print(f'freq_w: {freq_w}')
         _, predictions_w[i] = torch.max(freq_w, 0)
         if i < 4:
             print(ttap, ttaw, predictions_w[i].item(), labels[i].item(),

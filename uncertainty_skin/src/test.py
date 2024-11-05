@@ -10,8 +10,12 @@ import torch
 import os
 import pandas as pd
 
-@hydra.main(config_path="/repo/uncertainty_skin/uncertainty_skin/configs/", config_name="config")
-def test(config: DictConfig, seed: int, checkpoint_path: str):
+def test(config: DictConfig,
+         seed: int,
+         checkpoint_path: str,
+         logger: callable,
+         unique_id: str):
+    
     set_seed(seed)
     data_module = ISICDataModule(config.dataset)
     data_module.setup()
@@ -27,7 +31,6 @@ def test(config: DictConfig, seed: int, checkpoint_path: str):
     else:
         raise ValueError(f"Unknown model: {config.model.name}")
 
-    logger = ClearMLLogger(project_name="ISIC_2024", task_name=f"{config.model.name}_testing", offline=config.offline)
     trainer = pl.Trainer(**config.trainer, logger=logger)
 
     trainer.test(model, datamodule=data_module)

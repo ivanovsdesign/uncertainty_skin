@@ -21,10 +21,13 @@ def create_model(config):
         raise ValueError(f"Unknown model: {config.model.name}")
     return model
 
-@hydra.main(config_path="/repo/uncertainty_skin/uncertainty_skin/configs", config_name="config")
-def train(config: DictConfig, seed: int):
+def train(config: DictConfig,
+          seed: int,
+          logger: callable,
+          unique_id: str):
+    
     set_seed(seed)
-    unique_id = uuid.uuid4()
+
     
     config.dataset.seed = seed
 
@@ -43,12 +46,6 @@ def train(config: DictConfig, seed: int):
         LearningRateMonitor("epoch")
     ]
 
-    logger = ClearMLLogger(
-        project_name="ISIC_2024",
-        task_name=f"{config.model.name}_{seed}_{config.model.loss_fun}_training_{unique_id}",
-        offline=config.offline
-    )
-
     trainer = pl.Trainer(max_epochs=config.trainer.max_epochs, logger=logger, callbacks=callbacks)
     trainer.fit(model, data_module)
 
@@ -64,9 +61,11 @@ def train(config: DictConfig, seed: int):
     with open(f'{os.path.join(os.getcwd(), 'trained_paths.csv')}', 'a') as file:
         file.write(f'{seed}, {config.model.name}, {trainer.checkpoint_callback.best_model_path}\n')
 
-    os.chdir(get_original_cwd())
-    os.makedirs('checkpoints', exist_ok=True)
-    os.system(f'cp {trainer.checkpoint_callback.best_model_path} checkpoints/')
+    original_dir = get_original_cwd()
+    os.makedirs(os.path.join(original_dir, 'checkpoints'), exist_ok=True)
+    os.system(f"cp {trainer.checkpoint_callback.best_model_path} {os.path.join(original_dir, 'checkpoints')}")
+    
+    logger._task.close()
 
     return trainer.checkpoint_callback.best_model_path
 

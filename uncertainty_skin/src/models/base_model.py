@@ -209,8 +209,9 @@ class BaseModel(pl.LightningModule):
         })
 
         # Plot histograms
-        hist(df, 'Mode_confidence_(soft)', (4, 4))
-        hist(df, 'Mode_certainty_(soft)', (4, 4))
+        name = f'{self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}'
+        hist(df, 'Mode_confidence_(soft)', (4, 4), name = name + ' Mode Confidence (soft)')
+        hist(df, 'Mode_certainty_(soft)', (4, 4), name = name + ' Mode Certainty (soft)')
 
         # Confusion matrix for mode-based TTA predictions
         cm = confusion_matrix(mode_labels.cpu(), mode_predictions.cpu())
@@ -246,7 +247,6 @@ class BaseModel(pl.LightningModule):
             'seed': self.config.dataset.seed,
             '# samples': len(test_labels_tta),
             '# TTA': self.config.dataset.num_tta,
-            'Seed': self.config.dataset.seed,
             'F1 (without TTA)': f1,
             'Acc (without TTA)': accuracy,
             'Acc TTAM': accuracy_tta(mode_labels, mode_predictions)['acc_without_u'],

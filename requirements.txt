@@ -9,4 +9,4 @@ scikit-learn==1.5.1
 matplotlib==3.9.2
 seaborn==0.13.2
 pytorch_metric_learning==2.7.0
-
+textual==0.85.2

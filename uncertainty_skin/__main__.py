@@ -212,8 +212,11 @@ def main(stdscr):
                                 if checkpoint_menu_items[checkpoint_row_idx] == "Go Back":
                                     break
                                 checkpoint = checkpoints[checkpoint_row_idx]
+                                
+                                directory  = os.path.join(os.getcwd(), 'checkpoints')
+                                
                                 curses.endwin()  # Exit curses mode to restore terminal state
-                                subprocess.run(["python", f"{project}/main_test.py", "+experiment=" + config_file, logging_option_selected])
+                                subprocess.run(["python", f"{project}/main_test.py", "+experiment=" + config_file, "model.checkpoint_path=" + f'"{os.path.join(directory, checkpoint)}"', logging_option_selected])
                                 stdscr.addstr(1, 0, "Experiment completed successfully!")
                                 stdscr.refresh()
                                 stdscr.getch()

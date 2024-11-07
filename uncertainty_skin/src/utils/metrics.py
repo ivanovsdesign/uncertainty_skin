@@ -32,6 +32,7 @@ def hist(df, values, histSize, name):
     sns.histplot(data=df[df['True or false prediction'] == False],x = values, color="red",     
                  label='False predictions', bins=n, kde=True)
     plt.legend()
+    plt.title(f'{name}')
     plt.savefig(f'hist_{name}.png')
     plt.close()
 
@@ -229,7 +230,7 @@ def test_vis(model, loader, device, nc, loss_fun):
 
     return test_inputs, pd.DataFrame(data=test_attr)
 
-def test_vis_tta(model, loader, num_classes, loss_fun, figs=3, fSize=(8, 8), nSamples=4, device='cuda', numTTA=10):
+def test_vis_tta(model, loader, num_classes, loss_fun, seed, figs=1, fSize=(8, 8), nSamples=4, device='cuda', numTTA=10):
     """
     Perform test-time augmentation (TTA) and visualize test set predictions.
 
@@ -255,7 +256,7 @@ def test_vis_tta(model, loader, num_classes, loss_fun, figs=3, fSize=(8, 8), nSa
         if i < figs:
             out = torchvision.utils.make_grid(test_inputs[:nSamples].cpu(), nrow=4)
             fig = plt.figure(figsize=fSize)
-            imshow(out, title='Test-time augmentation')
+            imshow(out, title=f'Test-time augmentation {loss_fun} {seed}')
         test_labels_tta.append(test_attr['test_labels'])
         test_predictions_tta.append(test_attr['test_predictions'])
         test_certainties_s_tta.append(test_attr['test_certainties_s'])

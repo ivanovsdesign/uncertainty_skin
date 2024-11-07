@@ -35,6 +35,8 @@ def multi_seed_train_and_test(config: DictConfig):
         combined_summary_df.to_csv(f"{config.model.name}_combined_summary.csv", index=False)
         metrics_std.to_csv(f"{config.model.name}_metrics_std.csv")
         metrics_error.to_csv(f"{config.model.name}_metrics_error.csv")
+    
+    logger._task.close()
 
 if __name__ == "__main__":
     multi_seed_train_and_test()

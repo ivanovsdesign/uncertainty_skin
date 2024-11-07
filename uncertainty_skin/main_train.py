@@ -25,6 +25,7 @@ def main(config: DictConfig):
           logger = logger,
           unique_id=unique_id)
     
+    logger._task.close()
     
     
 

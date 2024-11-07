@@ -64,8 +64,7 @@ def train(config: DictConfig,
     original_dir = get_original_cwd()
     os.makedirs(os.path.join(original_dir, 'checkpoints'), exist_ok=True)
     os.system(f"cp {trainer.checkpoint_callback.best_model_path} {os.path.join(original_dir, 'checkpoints')}")
-    
-    logger._task.close()
+
 
     return trainer.checkpoint_callback.best_model_path
 

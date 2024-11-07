@@ -184,14 +184,16 @@ class BaseModel(pl.LightningModule):
         # Plot confusion matrix
         cm = confusion_matrix(test_labels_tta, test_predictions_tta)
         cm_display = ConfusionMatrixDisplay(cm, display_labels=self.config.dataset.class_names).plot()
-        plt.savefig(f"{self.config.model.name}_confusion_matrix.png")
+        cm_display.ax_.set_title(f'TTA predictions {self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}')
+        plt.savefig(f"{self.config.model.name}_{self.config.dataset.seed}_confusion_matrix.png")
 
         # Calculate TTA metrics
         test_attr_tta = test_vis_tta(self,
                                      self.trainer.datamodule.test_dataloader(),
                                      num_classes = self.config.model.num_classes,
                                      loss_fun = self.config.model.loss_fun,
-                                     figs=5,
+                                     seed = self.config.dataset.seed,
+                                     figs=1,
                                      numTTA=self.config.dataset.num_tta)
         
         mode_labels = torch.mode(test_attr_tta['labels_tta'], dim=0).values
@@ -210,13 +212,15 @@ class BaseModel(pl.LightningModule):
 
         # Plot histograms
         name = f'{self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}'
-        hist(df, 'Mode_confidence_(soft)', (4, 4), name = name + ' Mode Confidence (soft)')
-        hist(df, 'Mode_certainty_(soft)', (4, 4), name = name + ' Mode Certainty (soft)')
+        hist(df, 'Mode_confidence_(soft)', (4, 4), name = f'{name} Mode Confidence (soft)')
+        hist(df, 'Mode_certainty_(soft)', (4, 4), name = f'{name} Mode Certainty (soft)')
 
         # Confusion matrix for mode-based TTA predictions
         cm = confusion_matrix(mode_labels.cpu(), mode_predictions.cpu())
         print('Mode based TTA predictions (TTAM)')
         cm_display = ConfusionMatrixDisplay(cm, display_labels=self.config.dataset.class_names).plot()
+        cm_display.ax_.set_title(f'Mode based TTA predictions (TTAM) {self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}')
+        plt.savefig(f"{self.config.model.name}_{self.config.dataset.seed}_mode_confusion_matrix.png")
         
         print('Calculating weighted predictions...')
 
@@ -238,6 +242,15 @@ class BaseModel(pl.LightningModule):
         cm = confusion_matrix(mode_labels.cpu(), weightedPred['predictionsCo'].cpu())
         print('Confidence based soft TTA predictions (TTAWCo-S)')
         cm_display = ConfusionMatrixDisplay(cm, display_labels=self.config.dataset.class_names).plot()
+        cm_display.ax_.set_title(f'Confidence based soft TTA predictions (TTAWCo-S) {self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}')
+        plt.savefig(f"{self.config.model.name}_{self.config.dataset.seed}_confidence_confusion_matrix.png")
+        
+        cm = confusion_matrix(mode_labels.cpu(), weightedPred['predictionsCe'].cpu())
+        print('Certainty based soft TTA predictions (TTAWCe-S)')
+        cm_display = ConfusionMatrixDisplay(cm, display_labels=self.config.dataset.class_names).plot()
+        cm_display.ax_.set_title(f'Confidence based soft TTA predictions (TTAWCo-S) {self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}')
+        plt.savefig(f"{self.config.model.name}_{self.config.dataset.seed}_certainty_confusion_matrix.png")
+
 
         # Summary table
         test_accuracy_summary = {

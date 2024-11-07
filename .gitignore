@@ -5,10 +5,15 @@ __pycache__/
 
 # C extensions
 *.so
+
 clearml.sh 
 
 outputs/
 multirun/
+*.out
+out.txt
+
+dev.ipynb
 
 checkpoints/
 

@@ -5,7 +5,7 @@ defaults:
 offline: True
 
 model:
-  name: resnet50
+  name: CNN
   loss_fun: 'TM+CE'
   checkpoint_path: '/repo/uncertainty_skin/outputs/2024-11-02/13-25-48/checkpoints/CNN_42_TM+UANLL_5e5183ea-9d19-493f-a1ae-799dac919ce8_epoch=0.ckpt'
 

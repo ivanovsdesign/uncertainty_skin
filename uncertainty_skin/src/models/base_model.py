@@ -269,4 +269,4 @@ class BaseModel(pl.LightningModule):
         }
 
         summary_df = pd.DataFrame([test_accuracy_summary])
-        summary_df.to_csv(f"{self.config.model.name}_summary.csv", index=False)
+        summary_df.to_csv(f"{self.config.model.name}_{self.config.dataset.seed}_summary.csv", index=False)

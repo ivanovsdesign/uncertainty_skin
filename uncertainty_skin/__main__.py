@@ -1,6 +1,7 @@
 import os
 import curses
 import subprocess
+import shutil
 
 project = 'uncertainty_skin'
 
@@ -95,9 +96,8 @@ def download_dataset(stdscr):
     stdscr.clear()
     stdscr.addstr(0, 0, "Downloading the dataset...")
     stdscr.refresh()
-    # Add your dataset download commands here
-    # Example: subprocess.run(["wget", "<dataset_url>", "-O", "dataset.zip"])
-    # Example: subprocess.run(["unzip", "dataset.zip"])
+    os.makedirs('data', exist_ok=True)
+    os.system('scp -r -P 2277 root@10.90.120.109:/repo/uncertainty_skin/data data/')
     stdscr.addstr(1, 0, "Dataset downloaded successfully!")
     stdscr.refresh()
     stdscr.getch()

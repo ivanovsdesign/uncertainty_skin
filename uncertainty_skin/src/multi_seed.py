@@ -36,7 +36,30 @@ def multi_seed_train_and_test(config: DictConfig):
         metrics_std.to_csv(f"{config.model.name}_metrics_std.csv")
         metrics_error.to_csv(f"{config.model.name}_metrics_error.csv")
     
+    logger._task.upload_artifact('Run summary', combined_summary_df)
+    logger._task.upload_artifact('Metrics_std', metrics_std)
+    logger._task.upload_artifact('Metrics_error', metrics_error)
+    
+    logger.report_table(
+        title="Run summary", 
+        series="Metrics",
+        table_plot=combined_summary_df
+    )
+    
+    logger.report_table(
+        title="Metrics STD", 
+        series="Metrics",
+        table_plot=metrics_std
+    )
+    
+    logger.report_table(
+        title="Metrics Error", 
+        series="Metrics",
+        table_plot=metrics_error
+    )
+    
     logger._task.close()
+    
 
 if __name__ == "__main__":
     multi_seed_train_and_test()

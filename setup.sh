@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define the environment name
-ENV_NAME="uncertainty_isic"
+ENV_NAME="uncertainty_skin"
 
 # Define the Python version (optional)
 PYTHON_VERSION="3.12.4"

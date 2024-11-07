@@ -10,7 +10,7 @@ class ClearMLLogger(Logger):
         self._task = Task.init(project_name=project_name, 
                                task_name=task_name,
                                auto_connect_frameworks={
-                                   'pytorch':['*.pt']
+                                   'pytorch':['*.pt'], 'data':['*.csv']
                                })
 
     @property

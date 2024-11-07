@@ -8,6 +8,7 @@ __pycache__/
 
 clearml.sh 
 
+data1/
 outputs/
 multirun/
 *.out

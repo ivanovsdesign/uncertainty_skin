@@ -16,6 +16,7 @@ out.txt
 dev.ipynb
 
 checkpoints/
+notebooks/
 
 # Distribution / packaging
 .Python

@@ -5,6 +5,7 @@ from src.train import train
 from src.test import test
 
 from src.utils.clearml_logger import ClearMLLogger
+from clearml import Logger
 
 import uuid
 
@@ -40,22 +41,10 @@ def multi_seed_train_and_test(config: DictConfig):
     logger._task.upload_artifact('Metrics_std', metrics_std)
     logger._task.upload_artifact('Metrics_error', metrics_error)
     
-    logger.report_table(
+    Logger.current_logger().report_table(
         title="Run summary", 
         series="Metrics",
         table_plot=combined_summary_df
-    )
-    
-    logger.report_table(
-        title="Metrics STD", 
-        series="Metrics",
-        table_plot=metrics_std
-    )
-    
-    logger.report_table(
-        title="Metrics Error", 
-        series="Metrics",
-        table_plot=metrics_error
     )
     
     logger._task.close()

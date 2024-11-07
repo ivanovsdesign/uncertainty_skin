@@ -22,6 +22,9 @@ This project focuses on classifying skin lesions as benign or malignant using de
 
 ## 🛠️ Setup
 
+> This repository is for internal use.  
+> Do not share the credentials listed in `clearml_example.sh`
+
 To set up the environment for running the experiments, follow these steps:
 
 1. **Clone the Repository**:
@@ -132,7 +135,11 @@ python uncertainty_skin/main_train.py +experiment=tm_uanll_cnn
 
 Copy the existing config inside `uncertainty_skin/configs/experiment` 
 
-The structure of the config: 
+> You can check possible configurations in `config.yaml` and other configs inside the `configs` file tree
+
+> More about [Hydra config](https://hydra.cc/docs/intro/)
+
+The structure of the experiment config: 
 ```
 # @package _global_
 defaults: 
@@ -154,7 +161,25 @@ trainer:
 
 ```
 
+then launch your experiment with common override syntax. Do not include `.yaml` extension in CLI command - just file name without an extension. For example: 
+
+```
+python uncertainty_skin/multi_seed.py +experiment=<your_new_experiment>
+```
+
 ## 📊 Results
+
+> All results are being logged with [ClearML](https://app.clear.ml/)  
+> Default project name `ISIC 2024`
+
+### ClearML experiment page
+You can review the results of the experiment inside the corresponding section of your project.
+
+**Plots** tab include all graphics + final result table for multiseed experiment `Run summary`
+
+Logstd and errors are logged in **Artifacts** tab together with `Run summary` csv
+
+### Local files
 After running the experiments, the results will be saved in root directory. 
 
 Without `--multirun` argument: 

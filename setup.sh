@@ -35,6 +35,11 @@ else
 
 fi
 
+if [ ! -f clearml.sh ]; then
+    echo "Creating clearml.sh..."
+    cp clearml_example.sh clearml.sh
+fi
+
 source clearml.sh
 
 # Verify the environment was created and activated

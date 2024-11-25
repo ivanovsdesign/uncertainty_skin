@@ -7,13 +7,14 @@ dropout_rate: 0.25
 top_bn: False
 
 loss_fun: TM+UANLL
-weight: 0.9
 label_smoothing: 0.1
 lr: 0.0001
 
 checkpoint_path: '/repo/uncertainty_skin/outputs/2024-11-01/15-33-48/checkpoints/resnet50_42_TM+UANLL_95fd2a77-b348-4346-835c-57f4c8a3dfed_epoch=1.ckpt'
 
 optimizer_name: Adam
+
+num_tta: 10
 
 optimizer_hparams:
   weight_decay: 1e-4

@@ -10,3 +10,6 @@ model:
 dataset:
   img_size: 32
   bagging_size: 15000
+
+trainer:
+  max_epochs: 100

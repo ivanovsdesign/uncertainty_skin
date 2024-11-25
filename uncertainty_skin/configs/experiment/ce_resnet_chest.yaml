@@ -1,0 +1,22 @@
+# @package _global_
+defaults: 
+  - _self_
+
+model:
+  name: resnet50
+  loss_fun: 'CE'
+  label_smoothing: 0.0
+  checkpoint_path: null
+  optimizer_name: Adam
+  optimizer_hparams:
+    weight_decay: 1e-4
+
+
+dataset:
+  img_size: 32
+  train_path: '/repo/uncertainty_skin/data/chest/train.csv'
+  val_path: '/repo/uncertainty_skin/data/chest/val.csv'
+  test_path: '/repo/uncertainty_skin/data/chest/test.csv'
+
+trainer:
+  max_epochs: 30

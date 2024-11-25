@@ -6,7 +6,7 @@ defaults:
 
 device: "cuda"
 
-timm_models: ['resnet50']
+timm_models: ['resnet50', 'resnet18']
 
 offline: False
 clearml_model_id: a65ecaf5e7644d8398383cfc67385ad6

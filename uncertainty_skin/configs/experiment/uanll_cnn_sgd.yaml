@@ -3,13 +3,15 @@ defaults:
   - _self_
 
 model:
-  name: CNN
-  loss_fun: 'TM+CE'
+  name: 'CNN'
+  loss_fun: 'UANLL'
   checkpoint_path: null
+  optimizer_name: SGD
+  weight_decay: 0.1
 
 dataset:
   img_size: 32
-  bagging_size: 15000
+  bagging_size: 10000
 
 trainer:
   max_epochs: 100

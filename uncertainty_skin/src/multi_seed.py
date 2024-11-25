@@ -42,7 +42,7 @@ def multi_seed_train_and_test(config: DictConfig):
     logger._task.upload_artifact('Metrics_error', metrics_error)
     
     Logger.current_logger().report_table(
-        title="Run summary", 
+        title="1. Run summary", 
         series="Metrics",
         table_plot=combined_summary_df
     )

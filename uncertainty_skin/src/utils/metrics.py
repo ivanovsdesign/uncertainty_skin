@@ -5,6 +5,44 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import pandas as pd
+from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
+
+
+def check_for_nan(features):
+    if np.isnan(features).any():
+        print("Input features contain NaN values.")
+
+def remove_nan_rows(features, labels):
+    nan_mask = np.isnan(features).any(axis=1)
+    features_clean = features[~nan_mask]
+    labels_clean = labels[~nan_mask]
+    return features_clean, labels_clean
+
+def plot_pca(features, labels, title, model_slug):
+    '''
+    Plots model embeddings
+    '''
+    
+    # Check for NaN values
+    check_for_nan(features)
+    
+    # Remove rows with NaN values
+    features_clean, labels_clean = remove_nan_rows(features, labels)
+    
+    # Apply PCA
+    pca = PCA(n_components=2)
+    features_2d = pca.fit_transform(features_clean)
+    
+    # Plot the scatter plot
+    plt.figure(figsize=(8, 6))
+    plt.scatter(features_2d[:, 0], features_2d[:, 1], c=labels_clean, cmap='viridis', alpha=0.7)
+    plt.title(title)
+    plt.xlabel('PC1')
+    plt.ylabel('PC2')
+    plt.colorbar()
+    plt.savefig(f"{model_slug}_{title.replace(' ', '_')}.png")
+    
 
 def imshow(inp, title):
     """Imshow for Tensor."""

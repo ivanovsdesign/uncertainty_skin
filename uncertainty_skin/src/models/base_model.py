@@ -19,7 +19,7 @@ class BaseModel(pl.LightningModule):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.model = self.build_model()
+        self.build_model()
         self.loss_fun, self.loss_module_1 = self.build_loss()
         self.mining_func = miners.TripletMarginMiner(margin=0.2, distance=distances.CosineSimilarity(), type_of_triplets="semihard")
 
@@ -30,7 +30,6 @@ class BaseModel(pl.LightningModule):
         raise NotImplementedError
 
     def build_loss(self):
-        
         if self.config.model.loss_fun == 'TM+UANLL':
             distance = distances.CosineSimilarity()
             reducer = reducers.ThresholdReducer(low=0)
@@ -45,6 +44,14 @@ class BaseModel(pl.LightningModule):
             loss_fun = losses.TripletMarginLoss(margin=1.2, distance=distance, reducer=reducer, embedding_regularizer=eRegularizer)
             loss_module_1 = nn.CrossEntropyLoss(label_smoothing=self.config.model.label_smoothing)
             print('CE loss is an additional loss term (module 1)')
+        elif self.config.model.loss_fun == 'CE':
+            loss_fun = None
+            loss_module_1 = nn.CrossEntropyLoss(label_smoothing=self.config.model.label_smoothing)
+            print('Single CE loss')
+        elif self.config.model.loss_fun == 'UANLL':
+            loss_fun = None
+            loss_module_1 = UANLLloss(smoothing=self.config.model.label_smoothing)
+            print('Single UANLL loss')
         else:
             raise ValueError(f"Unknown loss function: {self.config.model.loss_fun}")
         return loss_fun, loss_module_1
@@ -52,38 +59,42 @@ class BaseModel(pl.LightningModule):
     def forward(self, x):
         return self.model(x)
     
-    def lr_lambda(self,epoch,n=150,
-              delay=30,stop_lr=0):
+    def lr_lambda(self, epoch, n=150, delay=30, stop_lr=0):
         n = self.config.trainer.max_epochs
         start_lr = self.config.model.lr
         learning_rate = start_lr if epoch < delay else start_lr - (epoch - delay) * (start_lr - stop_lr) / (n - 1 - delay)
         return learning_rate / start_lr
 
     def configure_optimizers(self):
-        # We will support Adam or SGD as optimizers.
         if self.config.model.optimizer_name == "Adam":
-            # AdamW is Adam with a correct implementation of weight decay (see here
-            # for details: https://arxiv.org/pdf/1711.05101.pdf)
             optimizer = optim.AdamW(self.parameters(), **self.config.model.optimizer_hparams)
         elif self.config.model.optimizer_name == "SGD":
             optimizer = optim.SGD(self.parameters(), **self.config.model.optimizer_hparams)
         else:
             assert False, f'Unknown optimizer: "{self.config.model.optimizer_name}"'
 
-        # We will reduce the learning rate by 'gamma' after 'milestone' epochs
-        scheduler = optim.lr_scheduler.LambdaLR(optimizer, self.lr_lambda)#MultiStepLR(optimizer, milestones=MILESTONES, gamma=GAMMA)
+        scheduler = optim.lr_scheduler.LambdaLR(optimizer, self.lr_lambda)
         return [optimizer], [scheduler]
 
     def training_step(self, batch, batch_idx):
         x, y = batch
         embeddings = self(x)
-        indices_tuple = self.mining_func(embeddings[:, :self.config.model.num_classes], y)
-        loss = self.loss_fun(embeddings[:, :self.config.model.num_classes], y, indices_tuple) + self.loss_module_1(embeddings, y)
-        if self.config.model.loss_fun == 'TM+CE':
-            preds = nn.functional.softmax(embeddings[:, :self.config.model.num_classes], 1)
-            acc = (preds.argmax(dim=-1) == y).float().mean()
+        if self.loss_fun is not None:
+            indices_tuple = self.mining_func(embeddings[:, :self.config.model.num_classes], y)
+            loss = self.loss_fun(embeddings[:, :self.config.model.num_classes], y, indices_tuple)
         else:
-            acc = (embeddings[:, :self.config.model.num_classes].argmax(dim=-1) == y).float().mean()
+            loss = 0
+        loss += self.loss_module_1(embeddings, y)
+        if self.config.model.loss_fun in ['TM+CE', 'CE']:
+            preds = nn.functional.softmax(embeddings, 1)
+            acc = (preds.argmax(dim=-1) == y).float().mean()
+        elif self.config.model.loss_fun in ['TM+UANLL', 'UANLL']:
+            print('UANLL preds')
+            preds = nn.functional.softmax(embeddings[:, :self.config.model.num_classes], 1)
+            print(preds)
+            acc = (preds.argmax(dim=-1) == y).float().mean()
+            print(f'UANLLacc: {acc}')
+            #acc = (embeddings[:, :self.config.model.num_classes].argmax(dim=-1) == y).float().mean()
         self.log("train_loss", loss.float(), on_epoch=True)
         self.log("train_acc", acc, on_epoch=True)
         return loss
@@ -91,9 +102,13 @@ class BaseModel(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y = batch
         embeddings = self(x)
-        indices_tuple = self.mining_func(embeddings[:, :self.config.model.num_classes], y)
-        loss = self.loss_fun(embeddings[:, :self.config.model.num_classes], y, indices_tuple) + self.loss_module_1(embeddings, y)
-        if self.config.model.loss_fun == 'TM+CE':
+        if self.loss_fun is not None:
+            indices_tuple = self.mining_func(embeddings[:, :self.config.model.num_classes], y)
+            loss = self.loss_fun(embeddings[:, :self.config.model.num_classes], y, indices_tuple)
+        else:
+            loss = 0
+        loss += self.loss_module_1(embeddings, y)
+        if self.config.model.loss_fun in ['TM+CE', 'CE']:
             preds = nn.functional.softmax(embeddings[:, :self.config.model.num_classes], 1)
             acc = (preds.argmax(dim=-1) == y).float().mean()
         else:
@@ -104,7 +119,7 @@ class BaseModel(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         x, y = batch
         embeddings = self(x)
-        if self.config.model.loss_fun == 'TM+CE':
+        if self.config.model.loss_fun in ['TM+CE', 'CE']:
             preds = nn.functional.softmax(embeddings[:, :self.config.model.num_classes], 1)
             acc = (preds.argmax(dim=-1) == y).float().mean()
         else:
@@ -113,7 +128,6 @@ class BaseModel(pl.LightningModule):
         self.log("test_acc", acc, on_epoch=True)
 
     def on_test_epoch_end(self):
-        # Perform TTA
         num_tta = self.config.dataset.num_tta
         test_predictions_tta = []
         test_labels_tta = []
@@ -123,7 +137,7 @@ class BaseModel(pl.LightningModule):
             test_predictions, test_labels, test_certainties_s, test_confidences_s = [], [], [], []
             for batch in self.trainer.datamodule.test_dataloader():
                 inputs, labels = batch
-                inputs = inputs.to(self.device)  # Move inputs to the same device as the model
+                inputs = inputs.to(self.device)
                 outputs = self(inputs)
                 preds = torch.softmax(outputs[:, :self.config.model.num_classes], dim=1)
                 certainties_s = torch.exp(-outputs[:, self.config.model.num_classes:])
@@ -143,8 +157,6 @@ class BaseModel(pl.LightningModule):
             test_certainties_s_tta.append(test_certainties_s)
             test_confidences_s_tta.append(test_confidences_s)
 
-        # Collect and log metrics
-        
         print('Collecting and logging metrics')
         
         test_predictions_tta = torch.stack(test_predictions_tta).mean(dim=0)
@@ -152,8 +164,8 @@ class BaseModel(pl.LightningModule):
         test_certainties_s_tta = torch.stack(test_certainties_s_tta).mean(dim=0)
         test_confidences_s_tta = torch.stack(test_confidences_s_tta).mean(dim=0)
         test_probs_tta = test_predictions_tta.squeeze().cpu()
-        test_predictions_tta = test_predictions_tta.argmax(dim=1).cpu()  # Move to CPU
-        test_labels_tta = test_labels_tta.squeeze().cpu()  # Move to CPU
+        test_predictions_tta = test_predictions_tta.argmax(dim=1).cpu()
+        test_labels_tta = test_labels_tta.squeeze().cpu()
 
         accuracy = accuracy_score(test_labels_tta, test_predictions_tta)
         f1 = f1_score(test_labels_tta, test_predictions_tta, average='weighted')
@@ -169,25 +181,22 @@ class BaseModel(pl.LightningModule):
             'roc_auc': roc_auc
         })
 
-        # Save predictions
         predictions_df = pd.DataFrame({
             'true_labels': test_labels_tta.tolist(),
             'predictions': test_predictions_tta.tolist(),
             'probabilities': test_probs_tta.tolist(),
-            'certainties_s': test_certainties_s_tta.cpu().tolist(),  # Move to CPU
-            'confidences_s': test_confidences_s_tta.cpu().tolist()  # Move to CPU
+            'certainties_s': test_certainties_s_tta.cpu().tolist(),
+            'confidences_s': test_confidences_s_tta.cpu().tolist()
         })
         predictions_df.to_csv(f"{self.config.model.name}_predictions.csv", index=False)
         
         print('Performing visualization...')
 
-        # Plot confusion matrix
         cm = confusion_matrix(test_labels_tta, test_predictions_tta)
         cm_display = ConfusionMatrixDisplay(cm, display_labels=self.config.dataset.class_names).plot()
         cm_display.ax_.set_title(f'TTA predictions {self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}')
         plt.savefig(f"{self.config.model.name}_{self.config.dataset.seed}_confusion_matrix.png")
 
-        # Calculate TTA metrics
         test_attr_tta = test_vis_tta(self,
                                      self.trainer.datamodule.test_dataloader(),
                                      num_classes = self.config.model.num_classes,
@@ -210,12 +219,10 @@ class BaseModel(pl.LightningModule):
             'True or false prediction': true_pred
         })
 
-        # Plot histograms
         name = f'{self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}'
         hist(df, 'Mode_confidence_(soft)', (4, 4), name = f'{name} Mode Confidence (soft)')
         hist(df, 'Mode_certainty_(soft)', (4, 4), name = f'{name} Mode Certainty (soft)')
 
-        # Confusion matrix for mode-based TTA predictions
         cm = confusion_matrix(mode_labels.cpu(), mode_predictions.cpu())
         print('Mode based TTA predictions (TTAM)')
         cm_display = ConfusionMatrixDisplay(cm, display_labels=self.config.dataset.class_names).plot()
@@ -224,7 +231,6 @@ class BaseModel(pl.LightningModule):
         
         print('Calculating weighted predictions...')
 
-        # Weighted TTA predictions
         weightedPred = ttaWeightedPred(test_attr_tta['labels_tta'], test_attr_tta['predictions_tta'], test_attr_tta['confidences_s_tta'], test_attr_tta['certainties_s_tta'], class_names = self.config.dataset.class_names)
         n_correct_TTAWCo_S = (weightedPred['predictionsCo'] == mode_labels).sum().item()
         n_correct_TTAWCe_S = (weightedPred['predictionsCe'] == mode_labels).sum().item()
@@ -238,7 +244,6 @@ class BaseModel(pl.LightningModule):
         print(f'accuracy of confidences based soft TTA predictions = {accuracy_TTAWCo_S}')
         print(f'accuracy of certainties based soft TTA predictions = {accuracy_TTAWCe_S}')
 
-        # Confusion matrix for confidence-based soft TTA predictions
         cm = confusion_matrix(mode_labels.cpu(), weightedPred['predictionsCo'].cpu())
         print('Confidence based soft TTA predictions (TTAWCo-S)')
         cm_display = ConfusionMatrixDisplay(cm, display_labels=self.config.dataset.class_names).plot()
@@ -248,7 +253,7 @@ class BaseModel(pl.LightningModule):
         cm = confusion_matrix(mode_labels.cpu(), weightedPred['predictionsCe'].cpu())
         print('Certainty based soft TTA predictions (TTAWCe-S)')
         cm_display = ConfusionMatrixDisplay(cm, display_labels=self.config.dataset.class_names).plot()
-        cm_display.ax_.set_title(f'Confidence based soft TTA predictions (TTAWCo-S) {self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}')
+        cm_display.ax_.set_title(f'Certainty based soft TTA predictions (TTAWCo-S) {self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}')
         plt.savefig(f"{self.config.model.name}_{self.config.dataset.seed}_certainty_confusion_matrix.png")
 
 

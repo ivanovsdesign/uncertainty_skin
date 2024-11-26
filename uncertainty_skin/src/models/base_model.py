@@ -133,6 +133,31 @@ class BaseModel(pl.LightningModule):
         test_labels_tta = []
         test_certainties_s_tta = []
         test_confidences_s_tta = []
+
+        # Collect predictions without TTA
+        test_predictions_no_tta, test_labels_no_tta = [], []
+        for batch in self.trainer.datamodule.test_dataloader():
+            inputs, labels = batch
+            inputs = inputs.to(self.device)
+            outputs = self(inputs)
+            preds = torch.softmax(outputs[:, :self.config.model.num_classes], dim=1)
+            test_predictions_no_tta.append(preds)
+            test_labels_no_tta.append(labels)
+
+        test_predictions_no_tta = torch.cat(test_predictions_no_tta)
+        test_labels_no_tta = torch.cat(test_labels_no_tta)
+        test_probs_no_tta = test_predictions_no_tta.squeeze().cpu()
+        test_predictions_no_tta = test_predictions_no_tta.argmax(dim=1).cpu()
+        test_labels_no_tta = test_labels_no_tta.squeeze().cpu()
+
+        accuracy_no_tta = accuracy_score(test_labels_no_tta, test_predictions_no_tta)
+        f1_no_tta = f1_score(test_labels_no_tta, test_predictions_no_tta, average='weighted')
+        precision_no_tta = precision_score(test_labels_no_tta, test_predictions_no_tta, average='weighted')
+        recall_no_tta = recall_score(test_labels_no_tta, test_predictions_no_tta, average='weighted')
+        roc_auc_no_tta = roc_auc_score(test_labels_no_tta, test_probs_no_tta, average='weighted', multi_class='ovr')
+
+        print(f'Metrics without TTA: Accuracy={accuracy_no_tta}, F1={f1_no_tta}, Precision={precision_no_tta}, Recall={recall_no_tta}, ROC-AUC={roc_auc_no_tta}')
+
         for _ in tqdm(range(num_tta), total=num_tta):
             test_predictions, test_labels, test_certainties_s, test_confidences_s = [], [], [], []
             for batch in self.trainer.datamodule.test_dataloader():
@@ -158,7 +183,7 @@ class BaseModel(pl.LightningModule):
             test_confidences_s_tta.append(test_confidences_s)
 
         print('Collecting and logging metrics')
-        
+
         test_predictions_tta = torch.stack(test_predictions_tta).mean(dim=0)
         test_labels_tta = torch.stack(test_labels_tta).mode(dim=0).values
         test_certainties_s_tta = torch.stack(test_certainties_s_tta).mean(dim=0)
@@ -171,7 +196,9 @@ class BaseModel(pl.LightningModule):
         f1 = f1_score(test_labels_tta, test_predictions_tta, average='weighted')
         precision = precision_score(test_labels_tta, test_predictions_tta, average='weighted')
         recall = recall_score(test_labels_tta, test_predictions_tta, average='weighted')
-        roc_auc = roc_auc_score(test_labels_tta, test_predictions_tta, average='weighted')
+        roc_auc = roc_auc_score(test_labels_tta, test_probs_tta, average='weighted', multi_class='ovr')
+
+        print(f'Metrics with TTA: Accuracy={accuracy}, F1={f1}, Precision={precision}, Recall={recall}, ROC-AUC={roc_auc}')
 
         self.logger.log_metrics({
             'accuracy': accuracy,
@@ -189,7 +216,7 @@ class BaseModel(pl.LightningModule):
             'confidences_s': test_confidences_s_tta.cpu().tolist()
         })
         predictions_df.to_csv(f"{self.config.model.name}_predictions.csv", index=False)
-        
+
         print('Performing visualization...')
 
         cm = confusion_matrix(test_labels_tta, test_predictions_tta)
@@ -198,13 +225,13 @@ class BaseModel(pl.LightningModule):
         plt.savefig(f"{self.config.model.name}_{self.config.dataset.seed}_confusion_matrix.png")
 
         test_attr_tta = test_vis_tta(self,
-                                     self.trainer.datamodule.test_dataloader(),
-                                     num_classes = self.config.model.num_classes,
-                                     loss_fun = self.config.model.loss_fun,
-                                     seed = self.config.dataset.seed,
-                                     figs=1,
-                                     numTTA=self.config.dataset.num_tta)
-        
+                                    self.trainer.datamodule.test_dataloader(),
+                                    num_classes=self.config.model.num_classes,
+                                    loss_fun=self.config.model.loss_fun,
+                                    seed=self.config.dataset.seed,
+                                    figs=1,
+                                    numTTA=self.config.dataset.num_tta)
+
         mode_labels = torch.mode(test_attr_tta['labels_tta'], dim=0).values
         mode_predictions = torch.mode(test_attr_tta['predictions_tta'], dim=0).values
         mode_confidences_s_tta = torch.mode(test_attr_tta['confidences_s_tta'], dim=0).values
@@ -220,18 +247,18 @@ class BaseModel(pl.LightningModule):
         })
 
         name = f'{self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}'
-        hist(df, 'Mode_confidence_(soft)', (4, 4), name = f'{name} Mode Confidence (soft)')
-        hist(df, 'Mode_certainty_(soft)', (4, 4), name = f'{name} Mode Certainty (soft)')
+        hist(df, 'Mode_confidence_(soft)', (4, 4), name=f'{name} Mode Confidence (soft)')
+        hist(df, 'Mode_certainty_(soft)', (4, 4), name=f'{name} Mode Certainty (soft)')
 
         cm = confusion_matrix(mode_labels.cpu(), mode_predictions.cpu())
         print('Mode based TTA predictions (TTAM)')
         cm_display = ConfusionMatrixDisplay(cm, display_labels=self.config.dataset.class_names).plot()
         cm_display.ax_.set_title(f'Mode based TTA predictions (TTAM) {self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}')
         plt.savefig(f"{self.config.model.name}_{self.config.dataset.seed}_mode_confusion_matrix.png")
-        
+
         print('Calculating weighted predictions...')
 
-        weightedPred = ttaWeightedPred(test_attr_tta['labels_tta'], test_attr_tta['predictions_tta'], test_attr_tta['confidences_s_tta'], test_attr_tta['certainties_s_tta'], class_names = self.config.dataset.class_names)
+        weightedPred = ttaWeightedPred(test_attr_tta['labels_tta'], test_attr_tta['predictions_tta'], test_attr_tta['confidences_s_tta'], test_attr_tta['certainties_s_tta'], class_names=self.config.dataset.class_names)
         n_correct_TTAWCo_S = (weightedPred['predictionsCo'] == mode_labels).sum().item()
         n_correct_TTAWCe_S = (weightedPred['predictionsCe'] == mode_labels).sum().item()
 
@@ -249,13 +276,12 @@ class BaseModel(pl.LightningModule):
         cm_display = ConfusionMatrixDisplay(cm, display_labels=self.config.dataset.class_names).plot()
         cm_display.ax_.set_title(f'Confidence based soft TTA predictions (TTAWCo-S) {self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}')
         plt.savefig(f"{self.config.model.name}_{self.config.dataset.seed}_confidence_confusion_matrix.png")
-        
+
         cm = confusion_matrix(mode_labels.cpu(), weightedPred['predictionsCe'].cpu())
         print('Certainty based soft TTA predictions (TTAWCe-S)')
         cm_display = ConfusionMatrixDisplay(cm, display_labels=self.config.dataset.class_names).plot()
-        cm_display.ax_.set_title(f'Certainty based soft TTA predictions (TTAWCo-S) {self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}')
+        cm_display.ax_.set_title(f'Certainty based soft TTA predictions (TTAWCe-S) {self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}')
         plt.savefig(f"{self.config.model.name}_{self.config.dataset.seed}_certainty_confusion_matrix.png")
-
 
         # Summary table
         test_accuracy_summary = {
@@ -265,8 +291,8 @@ class BaseModel(pl.LightningModule):
             'seed': self.config.dataset.seed,
             '# samples': len(test_labels_tta),
             '# TTA': self.config.dataset.num_tta,
-            'F1 (without TTA)': f1,
-            'Acc (without TTA)': accuracy,
+            'F1 (without TTA)': f1_no_tta,
+            'Acc (without TTA)': accuracy_no_tta,
             'Acc TTAM': accuracy_tta(mode_labels, mode_predictions)['acc_without_u'],
             'Acc TTAWCo-S': accuracy_TTAWCo_S,
             'Acc TTAWCe-S': accuracy_TTAWCe_S,

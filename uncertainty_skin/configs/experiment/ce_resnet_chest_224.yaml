@@ -4,21 +4,25 @@ defaults:
 
 model:
   name: resnet18
-  checkpoint_path: '/repo/uncertainty_skin/checkpoints/resnet18_42_CE_43016d1a-a1e6-4e97-860a-88c87ff90187_epoch=54.ckpt'
+  checkpoint_path: null
   input_channel: 3
   loss_fun: 'CE'
   label_smoothing: 0.0
   optimizer_name: Adam
+  lr: 0.001
   optimizer_hparams:
-    weight_decay: 1e-4
+    weight_decay: 1e-3
 
 
 dataset:
-  img_size: 32
+  img_size: 224
+  bagging: False
+  bagging_size: 0
   train_path: '/repo/uncertainty_skin/data/chest/train.csv'
   val_path: '/repo/uncertainty_skin/data/chest/val.csv'
   test_path: '/repo/uncertainty_skin/data/chest/test.csv'
   image_path: '/repo/uncertainty_skin/data/chest/images'
+  num_tta: 20
 
 trainer:
-  max_epochs: 100
+  max_epochs: 20

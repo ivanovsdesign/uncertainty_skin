@@ -57,7 +57,11 @@ def train(config: DictConfig,
         LearningRateMonitor("epoch")
     ]
 
-    trainer = pl.Trainer(max_epochs=config.trainer.max_epochs, logger=logger, callbacks=callbacks)
+    trainer = pl.Trainer(max_epochs=config.trainer.max_epochs,
+                         logger=logger,
+                         callbacks=callbacks,
+                         deterministic=True)
+    
     trainer.fit(model, data_module)
 
     model.load_state_dict(torch.load(trainer.checkpoint_callback.best_model_path, weights_only=True)['state_dict'])

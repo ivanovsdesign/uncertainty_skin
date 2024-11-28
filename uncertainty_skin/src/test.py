@@ -31,7 +31,9 @@ def test(config: DictConfig,
     else:
         raise ValueError(f"Unknown model: {config.model.name}")
 
-    trainer = pl.Trainer(**config.trainer, logger=logger)
+    trainer = pl.Trainer(**config.trainer,
+                         logger=logger,
+                         deterministic=True)
 
     trainer.test(model, datamodule=data_module)
 

@@ -3,6 +3,9 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 from .dataset import CustomImageDataset, ClassDataset
+import torch
+from torch.utils.data import WeightedRandomSampler
+from PIL import Image
 
 from torchvision import transforms
 
@@ -17,48 +20,105 @@ class ISICDataModule(pl.LightningDataModule):
             'train': transforms.Compose(
                     [
                     transforms.RandomResizedCrop(config.img_size, scale=config.crop_scale, antialias=True),
+                    transforms.Resize((self.config.img_size, self.config.img_size), interpolation=Image.BILINEAR),
                     transforms.ToTensor(),
-                    #transforms.Lambda(lambda x: x / 255.0),
+                    transforms.Lambda(lambda x: x / 255.0),
                     #transforms.Normalize(mean, std)
                     ]),
             'test': transforms.Compose(
                     [
-                    transforms.RandomResizedCrop(config.img_size ,scale=config.crop_scale_tta, antialias=True),
+                    #transforms.RandomResizedCrop(config.img_size ,scale=config.crop_scale_tta, antialias=True),
+                    transforms.Resize((self.config.img_size, self.config.img_size), interpolation=Image.BILINEAR),
                     transforms.ToTensor(),
-                    #transforms.Lambda(lambda x: x / 255.0),
+                    transforms.Lambda(lambda x: x / 255.0),
                     
                     #transforms.Normalize(mean, std)
                     ]),
             'test_tta':transforms.Compose(
                     [
                     transforms.RandomResizedCrop(config.img_size, scale=config.crop_scale_tta, antialias=True),
+                    transforms.Resize((self.config.img_size, self.config.img_size), interpolation=Image.BILINEAR),
                     transforms.ToTensor(),
-                    #transforms.Lambda(lambda x: x / 255.0),
+                    transforms.Lambda(lambda x: x / 255.0),
                     #transforms.Normalize(mean, std)
                     ])
                 }  # Define your transforms here
 
     def setup(self, stage=None):
-        if self.config.bagging:
-            self.dataframe = self.dataframe.sample(n=self.config.bagging_size, replace=True, random_state=self.config.seed).reset_index()
+        if self.config.bagging == True:
+            self.dataframe = self.dataframe.sample(n=self.config.bagging_size, replace=True, random_state=self.config.seed).reset_index(drop=True)
+            
+        #print(f'Dataframe shape: {self.dataframe.shape}')
+        #print(f'Dataframe head: {self.dataframe.head()}')  
+            
         train_val_df, test_df = train_test_split(self.dataframe, test_size=self.config.test_size, random_state=self.config.seed)
         train_df, val_df = train_test_split(train_val_df, test_size=self.config.val_size / (self.config.train_size + self.config.val_size), random_state=self.config.seed)
         self.train_dataset = CustomImageDataset(train_df, self.config.path, self.transform['train'])
         self.val_dataset = CustomImageDataset(val_df, self.config.path, self.transform['test'])
         self.test_dataset = CustomImageDataset(test_df, self.config.path, self.transform['test'])
         self.test_tta_dataset = CustomImageDataset(test_df, self.config.path, self.transform['test_tta'])
+        
+        #print(f'Train idx: {train_df.reset_index(drop=True).index}')
+        #print(f'Dataframe shape: {train_df.shape}')
+        #print(f'Dataframe head: {train_df.head()}')
+        #print(f'Dataframe head: {train_df.reset_index(drop=True).head()}')
+        
+        labels = [int(label) for _, label in zip(train_df.index, train_df.target)]
+        class_sample_count = [labels.count(i) for i in [0,1]]
+        weight = 1. / torch.tensor(class_sample_count, dtype=torch.float)
+        samples_weight = torch.tensor([weight[t] for t in labels])
+        self.train_sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
+        
+        labels = [int(label) for _, label in zip(train_df.index, val_df.target)]
+        class_sample_count = [labels.count(i) for i in [0,1]]
+        weight = 1. / torch.tensor(class_sample_count, dtype=torch.float)
+        samples_weight = torch.tensor([weight[t] for t in labels])
+        self.val_sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
+        
+        labels = [int(label) for _, label in zip(train_df.index, test_df.target)]
+        class_sample_count = [labels.count(i) for i in [0,1]]
+        weight = 1. / torch.tensor(class_sample_count, dtype=torch.float)
+        samples_weight = torch.tensor([weight[t] for t in labels])
+        self.test_sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
+        
+        self.g = torch.Generator()
+        self.g.manual_seed(self.config.seed)
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.config.batch_size, num_workers=self.config.num_workers)
+        return DataLoader(self.train_dataset,
+                          batch_size=self.config.batch_size,
+                          num_workers=self.config.num_workers,
+                          sampler=self.train_sampler,
+                          pin_memory=True,
+                          worker_init_fn=self.config.seed % 2**32,
+                          generator=self.g)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.config.batch_size, num_workers=self.config.num_workers)
+        return DataLoader(self.val_dataset,
+                          batch_size=self.config.batch_size,
+                          num_workers=self.config.num_workers,
+                          sampler=self.val_sampler,
+                          pin_memory=True,
+                          worker_init_fn=self.config.seed % 2**32,
+                          generator=self.g)
 
     def test_dataloader(self):
         if self.config.num_tta > 1:
-            return DataLoader(self.test_tta_dataset, batch_size=self.config.batch_size, num_workers=self.config.num_workers)
+            return DataLoader(self.test_tta_dataset,
+                              batch_size=self.config.batch_size,
+                              num_workers=self.config.num_workers,
+                              sampler=self.test_sampler,
+                              pin_memory=True,
+                              worker_init_fn=self.config.seed % 2**32,
+                              generator=self.g)
         else:
-            return DataLoader(self.test_dataset, batch_size=self.config.batch_size, num_workers=self.config.num_workers)
+            return DataLoader(self.test_dataset,
+                              batch_size=self.config.batch_size,
+                              num_workers=self.config.num_workers,
+                              sampler=self.test_sampler,
+                              pin_memory=True,
+                              worker_init_fn=self.config.seed % 2**32,
+                              generator=self.g)
         
 class ChestDataModule(pl.LightningDataModule):
     def __init__(self, config):
@@ -99,15 +159,60 @@ class ChestDataModule(pl.LightningDataModule):
         self.val_dataset = ClassDataset(self.val_dataframe, self.image_path, self.transform)
         self.test_dataset = ClassDataset(self.test_dataframe, self.image_path, self.test_transform)
         self.test_tta_dataset = ClassDataset(self.test_dataframe, self.image_path, self.tta_transform)
+        
+        labels = [label for _, label in self.train_dataset]
+        class_sample_count = [labels.count(i) for i in [0,1]]
+        weight = 1. / torch.tensor(class_sample_count, dtype=torch.float)
+        samples_weight = torch.tensor([weight[t] for t in labels])
+        self.train_sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
+        
+        labels = [label for _, label in self.val_dataset]
+        class_sample_count = [labels.count(i) for i in [0,1]]
+        weight = 1. / torch.tensor(class_sample_count, dtype=torch.float)
+        samples_weight = torch.tensor([weight[t] for t in labels])
+        self.val_sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
+        
+        labels = [label for _, label in self.test_dataset]
+        class_sample_count = [labels.count(i) for i in [0,1]]
+        weight = 1. / torch.tensor(class_sample_count, dtype=torch.float)
+        samples_weight = torch.tensor([weight[t] for t in labels])
+        self.test_sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
+        
+        self.g = torch.Generator()
+        self.g.manual_seed(self.config.seed)
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.config.batch_size, num_workers=self.config.num_workers)
+        return DataLoader(self.train_dataset,
+                          batch_size=self.config.batch_size,
+                          num_workers=self.config.num_workers,
+                          sampler=self.train_sampler,
+                          pin_memory=True,
+                          worker_init_fn=self.config.seed % 2**32,
+                          generator=self.g)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.config.batch_size, num_workers=self.config.num_workers)
+        return DataLoader(self.val_dataset,
+                          batch_size=self.config.batch_size,
+                          num_workers=self.config.num_workers,
+                          sampler=self.val_sampler,
+                          pin_memory=True,
+                          worker_init_fn=self.config.seed % 2**32,
+                          generator=self.g)
 
     def test_dataloader(self):
         if self.config.num_tta > 1:
-            return DataLoader(self.test_tta_dataset, batch_size=self.config.batch_size, num_workers=self.config.num_workers)
+            return DataLoader(self.test_tta_dataset,
+                              batch_size=self.config.batch_size,
+                              num_workers=self.config.num_workers,
+                              sampler=self.test_sampler,
+                              pin_memory=True,
+                              worker_init_fn=self.config.seed % 2**32,
+                              generator=self.g)
         else:
-            return DataLoader(self.test_dataset, batch_size=self.config.batch_size, num_workers=self.config.num_workers)
+            return DataLoader(self.test_dataset,
+                              batch_size=self.config.batch_size,
+                              num_workers=self.config.num_workers,
+                              sampler=self.test_sampler,
+                              pin_memory=True,
+                              worker_init_fn=self.config.seed % 2**32,
+                              generator=self.g)

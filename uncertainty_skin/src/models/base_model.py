@@ -34,14 +34,14 @@ class BaseModel(pl.LightningModule):
             distance = distances.CosineSimilarity()
             reducer = reducers.ThresholdReducer(low=0)
             eRegularizer = regularizers.LpRegularizer()
-            loss_fun = losses.TripletMarginLoss(margin=1.2, distance=distance, reducer=reducer, embedding_regularizer=eRegularizer)
+            loss_fun = losses.TripletMarginLoss(margin=self.config.model.margin, distance=distance, reducer=reducer, embedding_regularizer=eRegularizer)
             loss_module_1 = UANLLloss(smoothing=self.config.model.label_smoothing)
             print('UANLL loss is an additional loss term (module 1)')
         elif self.config.model.loss_fun == 'TM+CE':
             distance = distances.CosineSimilarity()
             reducer = reducers.ThresholdReducer(low=0)
             eRegularizer = regularizers.LpRegularizer()
-            loss_fun = losses.TripletMarginLoss(margin=1.2, distance=distance, reducer=reducer, embedding_regularizer=eRegularizer)
+            loss_fun = losses.TripletMarginLoss(margin=self.config.model.margin, distance=distance, reducer=reducer, embedding_regularizer=eRegularizer)
             loss_module_1 = nn.CrossEntropyLoss(label_smoothing=self.config.model.label_smoothing)
             print('CE loss is an additional loss term (module 1)')
         elif self.config.model.loss_fun == 'CE':
@@ -149,12 +149,15 @@ class BaseModel(pl.LightningModule):
         test_probs_no_tta = test_predictions_no_tta.squeeze().cpu()
         test_predictions_no_tta = test_predictions_no_tta.argmax(dim=1).cpu()
         test_labels_no_tta = test_labels_no_tta.squeeze().cpu()
+        
+        print(f'Test labels no TTA shape: {test_labels_no_tta.shape}')
+        print(f'Test probs no TTA shape: {test_probs_no_tta.argmax(-1).shape}')
 
         accuracy_no_tta = accuracy_score(test_labels_no_tta, test_predictions_no_tta)
         f1_no_tta = f1_score(test_labels_no_tta, test_predictions_no_tta, average='weighted')
         precision_no_tta = precision_score(test_labels_no_tta, test_predictions_no_tta, average='weighted')
         recall_no_tta = recall_score(test_labels_no_tta, test_predictions_no_tta, average='weighted')
-        roc_auc_no_tta = roc_auc_score(test_labels_no_tta, test_probs_no_tta, average='weighted', multi_class='ovr')
+        roc_auc_no_tta = roc_auc_score(test_labels_no_tta, test_probs_no_tta.argmax(-1), average='weighted', multi_class='ovr')
 
         print(f'Metrics without TTA: Accuracy={accuracy_no_tta}, F1={f1_no_tta}, Precision={precision_no_tta}, Recall={recall_no_tta}, ROC-AUC={roc_auc_no_tta}')
 
@@ -196,7 +199,7 @@ class BaseModel(pl.LightningModule):
         f1 = f1_score(test_labels_tta, test_predictions_tta, average='weighted')
         precision = precision_score(test_labels_tta, test_predictions_tta, average='weighted')
         recall = recall_score(test_labels_tta, test_predictions_tta, average='weighted')
-        roc_auc = roc_auc_score(test_labels_tta, test_probs_tta, average='weighted', multi_class='ovr')
+        roc_auc = roc_auc_score(test_labels_tta, test_probs_tta.argmax(-1), average='weighted', multi_class='ovr')
 
         print(f'Metrics with TTA: Accuracy={accuracy}, F1={f1}, Precision={precision}, Recall={recall}, ROC-AUC={roc_auc}')
 
@@ -287,6 +290,9 @@ class BaseModel(pl.LightningModule):
         test_accuracy_summary = {
             'ID': self.logger._task.id,
             'loss_fun': self.config.model.loss_fun,
+            'margin': self.config.model.margin,
+            'weight_decay': self.config.model.optimizer_hparams.weight_decay,
+            'label_smoothing': self.config.model.label_smoothing,
             'bagging_size': self.config.dataset.bagging_size,
             'seed': self.config.dataset.seed,
             '# samples': len(test_labels_tta),

@@ -2,13 +2,22 @@
 defaults: 
   - _self_
   - ../model: resnet
+  - ../dataset: isic_balanced
 
 model:
-  name: 'resnet50'
+  name: 'resnet18'
   loss_fun: 'TM+CE'
-  pretrained: false
-  checkpoint_path: '/repo/uncertainty_skin/outputs/2024-11-01/15-33-48/checkpoints/resnet50_42_TM+UANLL_95fd2a77-b348-4346-835c-57f4c8a3dfed_epoch=1.ckpt'
+  label_smoothing: 0.1
+  checkpoint_path: null
+  optimizer_name: Adam
+  optimizer_hparams:
+    weight_decay: 1e-4
+  # Triplet Margin Loss related settings
+  margin: 1.2
 
 dataset:
   img_size: 224
   bagging_size: 15000
+
+trainer:
+  max_epochs: 100

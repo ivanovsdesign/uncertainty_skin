@@ -35,6 +35,10 @@ class CNN(BaseModel):
         self.bn7 = nn.BatchNorm2d(512)
         self.bn8 = nn.BatchNorm2d(256)
         self.bn9 = nn.BatchNorm2d(128)
+        
+        # Define batch normalization for the linear layer if needed
+        if self.top_bn:
+            self.bn_c1 = nn.BatchNorm1d(n_outputs)
 
     def call_bn(self, bn, x):
         return bn(x)
@@ -57,7 +61,7 @@ class CNN(BaseModel):
         h = self.c6(h)
         h = F.leaky_relu(self.call_bn(self.bn6, h), negative_slope=0.01)
         h = F.max_pool2d(h, kernel_size=2, stride=2)
-        h = F.dropout2d(h, p=self.config.model.dropout_rate)
+        h = F.dropout2d(h, p=self.dropout_rate)
 
         h = self.c7(h)
         h = F.leaky_relu(self.call_bn(self.bn7, h), negative_slope=0.01)
@@ -91,7 +95,7 @@ class CNN(BaseModel):
         h = self.c6(h)
         h = F.leaky_relu(self.call_bn(self.bn6, h), negative_slope=0.01)
         h = F.max_pool2d(h, kernel_size=2, stride=2)
-        h = F.dropout2d(h, p=self.config.model.dropout_rate)
+        h = F.dropout2d(h, p=self.dropout_rate)
 
         h = self.c7(h)
         h = F.leaky_relu(self.call_bn(self.bn7, h), negative_slope=0.01)

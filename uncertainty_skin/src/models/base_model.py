@@ -1,19 +1,18 @@
-import pytorch_lightning as pl
-import torch.nn as nn
-import torch.optim as optim
 from pytorch_metric_learning import distances, losses, miners, reducers, testers, regularizers
 
 from src.functional.criterion import UANLLloss
 
-import torch
-
 from src.utils.metrics import calculate_ece, calculate_accuracy, calculate_f1_score_binary, certain_predictions, accuracy_tta, test_vis_tta, ttac, ttaWeightedPred, hist
-import numpy as np
-import pandas as pd
-from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay, f1_score, precision_score, recall_score, accuracy_score, roc_auc_score
-import matplotlib.pyplot as plt
 
 from tqdm import tqdm
+import pandas as pd
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import pytorch_lightning as pl
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score, confusion_matrix
+from sklearn.metrics import ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
 
 class BaseModel(pl.LightningModule):
     def __init__(self, config):
@@ -89,12 +88,8 @@ class BaseModel(pl.LightningModule):
             preds = nn.functional.softmax(embeddings, 1)
             acc = (preds.argmax(dim=-1) == y).float().mean()
         elif self.config.model.loss_fun in ['TM+UANLL', 'UANLL']:
-            print('UANLL preds')
             preds = nn.functional.softmax(embeddings[:, :self.config.model.num_classes], 1)
-            print(preds)
             acc = (preds.argmax(dim=-1) == y).float().mean()
-            print(f'UANLLacc: {acc}')
-            #acc = (embeddings[:, :self.config.model.num_classes].argmax(dim=-1) == y).float().mean()
         self.log("train_loss", loss.float(), on_epoch=True)
         self.log("train_acc", acc, on_epoch=True)
         return loss
@@ -163,7 +158,7 @@ class BaseModel(pl.LightningModule):
 
         for _ in tqdm(range(num_tta), total=num_tta):
             test_predictions, test_labels, test_certainties_s, test_confidences_s = [], [], [], []
-            for batch in self.trainer.datamodule.test_dataloader():
+            for batch in self.trainer.datamodule.tta_dataloader():
                 inputs, labels = batch
                 inputs = inputs.to(self.device)
                 outputs = self(inputs)
@@ -298,7 +293,10 @@ class BaseModel(pl.LightningModule):
             '# samples': len(test_labels_tta),
             '# TTA': self.config.dataset.num_tta,
             'F1 (without TTA)': f1_no_tta,
+            'ROCAUC (without TTA)': roc_auc_no_tta,
             'Acc (without TTA)': accuracy_no_tta,
+            'F1 TTA': f1,
+            'ROCAUC': roc_auc,
             'Acc TTAM': accuracy_tta(mode_labels, mode_predictions)['acc_without_u'],
             'Acc TTAWCo-S': accuracy_TTAWCo_S,
             'Acc TTAWCe-S': accuracy_TTAWCe_S,

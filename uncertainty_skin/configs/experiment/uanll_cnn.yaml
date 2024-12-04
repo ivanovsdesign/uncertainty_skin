@@ -1,11 +1,16 @@
 # @package _global_
 defaults: 
   - _self_
+  - ../model: resnet
 
 model:
   name: CNN
   loss_fun: 'UANLL'
+  label_smoothing: 0.1
   checkpoint_path: null
+  optimizer_name: Adam
+  optimizer_hparams:
+    weight_decay: 1e-4
 
 dataset:
   img_size: 32

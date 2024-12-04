@@ -17,6 +17,7 @@ out.txt
 dev.ipynb
 
 checkpoints/
+checkpoints_backup/
 notebooks/
 
 # Distribution / packaging

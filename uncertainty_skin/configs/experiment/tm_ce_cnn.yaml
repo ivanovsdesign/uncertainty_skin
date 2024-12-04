@@ -1,11 +1,18 @@
-# @package _global_
 defaults: 
   - _self_
+  - ../model: resnet
+  - ../dataset: isic_balanced
 
 model:
-  name: CNN
+  name: 'CNN'
   loss_fun: 'TM+CE'
+  label_smoothing: 0.1
   checkpoint_path: null
+  optimizer_name: Adam
+  optimizer_hparams:
+    weight_decay: 1e-4
+  # Triplet Margin Loss related settings
+  margin: 1.2
 
 dataset:
   img_size: 32

@@ -1,11 +1,18 @@
 # @package _global_
 defaults: 
   - _self_
+  - ../model: resnet
 
 model:
-  name: CNN
+  name: 'CNN'
   loss_fun: 'TM+UANLL'
-  checkpoint_path: '/repo/uncertainty_skin/outputs/2024-11-02/13-25-48/checkpoints/CNN_42_TM+UANLL_5e5183ea-9d19-493f-a1ae-799dac919ce8_epoch=0.ckpt'
+  label_smoothing: 0.1
+  checkpoint_path: null
+  optimizer_name: Adam
+  optimizer_hparams:
+    weight_decay: 1e-4
+  # Triplet Margin Loss related settings
+  margin: 1.2
 
 dataset:
   img_size: 32

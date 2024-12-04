@@ -203,7 +203,11 @@ def accuracy_tta(labels, pred, values_h=None):
             'acc_with_u': acc_with_u,
         }
 
-def test_vis(model, loader, device, nc, loss_fun):
+def test_vis(model: torch.nn.Module,
+             loader: torch.utils.data.DataLoader,
+             device: torch.device,
+             nc: int,
+             loss_fun: str) -> tuple:
     """
     Visualize test set predictions.
 
@@ -212,6 +216,7 @@ def test_vis(model, loader, device, nc, loss_fun):
         loader (torch.utils.data.DataLoader): DataLoader for the test set.
         device (torch.device): Device to use for computation.
         nc (int): Number of classes.
+        loss_fun (str): Name of loss function used. 
 
     Returns:
         tuple: Tuple containing test inputs and test attributes as a DataFrame.

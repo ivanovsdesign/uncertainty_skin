@@ -1,0 +1,22 @@
+# @package _global_
+defaults: 
+  - _self_
+  - ../model: resnet
+  - ../dataset: isic_sampled
+
+model:
+  name: resnet18
+  loss_fun: 'UANLL'
+  label_smoothing: 0.1
+  checkpoint_path: null
+  optimizer_name: Adam
+  optimizer_hparams:
+    weight_decay: 1e-4
+
+dataset:
+  img_size: 224
+  bagging_size: 15000
+  image_path: 
+
+trainer:
+  max_epochs: 100

@@ -284,6 +284,7 @@ class BaseModel(pl.LightningModule):
         # Summary table
         test_accuracy_summary = {
             'ID': self.logger._task.id,
+            'dataset': self.config.dataset.name,
             'loss_fun': self.config.model.loss_fun,
             'margin': self.config.model.margin,
             'weight_decay': self.config.model.optimizer_hparams.weight_decay,

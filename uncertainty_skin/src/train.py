@@ -11,6 +11,7 @@ from src.utils.utils import set_seed
 import torch
 import os
 import uuid
+import logging
 
 from src.utils.metrics import plot_pca
 from src.utils.utils import extract_features
@@ -39,6 +40,9 @@ def train(config: DictConfig,
     os.makedirs('checkpoints', exist_ok=True)
 
     data_module = ISICDataModule(config.dataset)
+    logging.info(f'Dataset name: {config.dataset.name}')
+    
+    
     model = create_model(config)
     
     # Extract embeddings before training

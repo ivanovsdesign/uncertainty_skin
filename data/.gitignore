@@ -1,3 +1,2 @@
-isic_balanced/
-isic_sampled/
-chest/
+*
+!kaggle.py

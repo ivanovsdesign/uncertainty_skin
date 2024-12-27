@@ -7,7 +7,7 @@ model:
   name: 'resnet18'
   loss_fun: 'TM+UANLL'
   label_smoothing: 0.1
-  checkpoint_path: null
+  checkpoint_path: ['/repo/uncertainty_skin/multirun/checkpoints_multirun/resnet18_0_TM+UANLL_b08f0d3a-6484-42e4-a1e5-921ed6ea556b_epoch=31.ckpt', '/repo/uncertainty_skin/multirun/checkpoints_multirun/resnet18_3_TM+UANLL_b08f0d3a-6484-42e4-a1e5-921ed6ea556b_epoch=39.ckpt', '/repo/uncertainty_skin/multirun/checkpoints_multirun/resnet18_9_TM+UANLL_b08f0d3a-6484-42e4-a1e5-921ed6ea556b_epoch=40.ckpt', '/repo/uncertainty_skin/multirun/checkpoints_multirun/resnet18_17_TM+UANLL_b08f0d3a-6484-42e4-a1e5-921ed6ea556b_epoch=38.ckpt', '/repo/uncertainty_skin/multirun/checkpoints_multirun/resnet18_42_TM+UANLL_b08f0d3a-6484-42e4-a1e5-921ed6ea556b_epoch=37.ckpt']
   optimizer_name: Adam
   optimizer_hparams:
     weight_decay: 1e-4

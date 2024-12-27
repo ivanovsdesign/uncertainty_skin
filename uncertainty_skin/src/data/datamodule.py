@@ -2,7 +2,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
-from .dataset import CustomImageDataset, ClassDataset
+from data.dataset import CustomImageDataset, ClassDataset
 import torch
 from torch.utils.data import WeightedRandomSampler
 from PIL import Image
@@ -23,25 +23,18 @@ class ISICDataModule(pl.LightningDataModule):
                     transforms.RandomResizedCrop(config.img_size, scale=config.crop_scale, antialias=True),
                     transforms.Resize((self.config.img_size, self.config.img_size), interpolation=Image.BILINEAR),
                     transforms.ToTensor(),
-                    #transforms.Lambda(lambda x: x / 255.0),
-                    #transforms.Normalize(mean, std)
                     ]),
             'test': transforms.Compose(
                     [
                     #transforms.RandomResizedCrop(config.img_size ,scale=config.crop_scale_tta, antialias=True),
                     transforms.Resize((self.config.img_size, self.config.img_size), interpolation=Image.BILINEAR),
                     transforms.ToTensor(),
-                    #transforms.Lambda(lambda x: x / 255.0),
-                    
-                    #transforms.Normalize(mean, std)
                     ]),
             'test_tta':transforms.Compose(
                     [
                     transforms.RandomResizedCrop(config.img_size, scale=config.crop_scale_tta, antialias=True),
                     transforms.Resize((self.config.img_size, self.config.img_size), interpolation=Image.BILINEAR),
                     transforms.ToTensor(),
-                    #transforms.Lambda(lambda x: x / 255.0),
-                    #transforms.Normalize(mean, std)
                     ])
                 }  # Define your transforms here
 

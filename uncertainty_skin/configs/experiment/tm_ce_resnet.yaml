@@ -8,7 +8,7 @@ model:
   name: 'resnet18'
   loss_fun: 'TM+CE'
   label_smoothing: 0.1
-  checkpoint_path: null
+  checkpoint_path: ['/repo/uncertainty_skin/multirun/checkpoints_multirun/resnet18_0_TM+CE_61539e93-55c3-43e5-aca5-4e35c95aa493_epoch=99.ckpt', '/repo/uncertainty_skin/multirun/checkpoints_multirun/resnet18_3_TM+CE_61539e93-55c3-43e5-aca5-4e35c95aa493_epoch=89.ckpt', '/repo/uncertainty_skin/multirun/checkpoints_multirun/resnet18_9_TM+CE_61539e93-55c3-43e5-aca5-4e35c95aa493_epoch=98.ckpt', '/repo/uncertainty_skin/multirun/checkpoints_multirun/resnet18_17_TM+CE_61539e93-55c3-43e5-aca5-4e35c95aa493_epoch=99.ckpt', '/repo/uncertainty_skin/multirun/checkpoints_multirun/resnet18_42_TM+CE_61539e93-55c3-43e5-aca5-4e35c95aa493_epoch=92.ckpt']
   optimizer_name: Adam
   optimizer_hparams:
     weight_decay: 1e-4

@@ -1,6 +1,15 @@
 from pytorch_metric_learning import distances, losses, miners, reducers, testers, regularizers
 
 from src.functional.criterion import UANLLloss
+from src.data.datamodule import ISICDataModule
+
+import logging
+import sys
+
+from typing import List, Tuple, Dict, Any, Optional
+from torch.utils.data import DataLoader
+
+import numpy as np
 
 from src.utils.metrics import calculate_ece, calculate_accuracy, calculate_f1_score_binary, certain_predictions, accuracy_tta, test_vis_tta, ttac, ttaWeightedPred, hist
 
@@ -13,6 +22,13 @@ import pytorch_lightning as pl
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score, confusion_matrix
 from sklearn.metrics import ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
+
+
+logging.basicConfig(
+    stream=sys.stderr, 
+    level=logging.DEBUG, 
+    format="%(asctime)s %(levelname)s: %(message)s"
+)
 
 class BaseModel(pl.LightningModule):
     def __init__(self, config):
@@ -122,187 +138,438 @@ class BaseModel(pl.LightningModule):
         print("Test set accuracy without TTA (Precision@1) = {}".format(acc))
         self.log("test_acc", acc, on_epoch=True)
 
-    def on_test_epoch_end(self):
-        num_tta = self.config.dataset.num_tta
-        test_predictions_tta = []
-        test_labels_tta = []
-        test_certainties_s_tta = []
-        test_confidences_s_tta = []
-
+    def on_test_epoch_end(self) -> None:
+        """
+        Perform predictions, TTA, ensembling, and weighted predictions at the end of the test epoch.
+        """
         # Collect predictions without TTA
+        test_predictions_no_tta, test_labels_no_tta = self.collect_predictions_no_tta()
+        self.evaluate_no_tta(test_predictions_no_tta, test_labels_no_tta)
+
+        # Perform TTA and ensembling
+        test_predictions_tta, test_labels_tta, test_confidences_tta, test_uncertainties_tta = self.perform_tta_and_ensembling()
+        self.evaluate_with_tta(test_predictions_tta, test_labels_tta)
+
+        # Save predictions to CSV
+        self.save_predictions_to_csv(test_predictions_no_tta, test_labels_no_tta, test_predictions_tta, test_labels_tta, test_confidences_tta, test_uncertainties_tta)
+
+        # Handle weighted predictions based on confidence and certainty
+        self.handle_weighted_predictions(test_predictions_tta, test_labels_tta, test_confidences_tta, test_uncertainties_tta)
+
+        # Compare metrics for different approaches
+        self.compare_metrics(test_predictions_no_tta, test_labels_no_tta, test_predictions_tta, test_labels_tta, test_confidences_tta, test_uncertainties_tta)
+
+    def compare_metrics(self, test_predictions_no_tta: torch.Tensor, test_labels_no_tta: torch.Tensor, test_predictions_tta: torch.Tensor, test_labels_tta: torch.Tensor, test_confidences_tta: torch.Tensor, test_uncertainties_tta: torch.Tensor) -> None:
+        """
+        Compare metrics for different approaches:
+        - Without TTA
+        - TTAM (Mode-based TTA)
+        - TTAWCo-S (Weighted with Confidences)
+        - TTAWCe-S (Weighted with Certainties)
+        - Ensembling (Simple)
+        - Ensembling with Confidences
+        - Ensembling with Certainties
+        - Ensembling with TTA
+
+        Args:
+            test_predictions_no_tta (torch.Tensor): Predictions without TTA.
+            test_labels_no_tta (torch.Tensor): True labels without TTA.
+            test_predictions_tta (torch.Tensor): Predictions with TTA.
+            test_labels_tta (torch.Tensor): True labels with TTA.
+            test_confidences_tta (torch.Tensor): Confidences with TTA.
+            test_uncertainties_tta (torch.Tensor): Uncertainties with TTA.
+        """
+        #mode_predictions_tta = self.mode_based_tta(test_predictions_tta)
+        
+        # Convert tensors to numpy for sklearn metrics
+        test_labels_no_tta = test_labels_no_tta.cpu().numpy()
+        test_labels_tta = test_labels_tta.cpu().numpy()
+        test_predictions_no_tta = test_predictions_no_tta.argmax(dim=1).cpu().numpy()
+        test_predictions_tta = test_predictions_tta.argmax(dim=1).cpu().numpy()
+        test_confidences_tta = test_confidences_tta.cpu().numpy()
+        test_uncertainties_tta = test_uncertainties_tta.cpu().numpy()
+
+        # 1. Without TTA
+        accuracy_no_tta = accuracy_score(test_labels_no_tta, test_predictions_no_tta)
+        f1_no_tta = f1_score(test_labels_no_tta, test_predictions_no_tta, average='weighted')
+        roc_auc_no_tta = roc_auc_score(test_labels_no_tta, test_predictions_no_tta, average='weighted', multi_class='ovr')
+
+        # 2. TTAM (Mode-based TTA)
+        # accuracy_ttam = accuracy_score(test_labels_tta, mode_predictions_tta)
+        # f1_ttam = f1_score(test_labels_tta, mode_predictions_tta, average='weighted')
+        # roc_auc_ttam = roc_auc_score(test_labels_tta, mode_predictions_tta, average='weighted', multi_class='ovr')
+        accuracy_ttam = 0
+        f1_ttam = 0
+        roc_auc_ttam = 0
+
+        # 3. TTAWCo-S (Weighted with Confidences)
+        weighted_predictions_co = self.weighted_predictions_with_confidence(test_predictions_tta, test_confidences_tta)
+        accuracy_tta_co = accuracy_score(test_labels_tta, weighted_predictions_co)
+        f1_tta_co = f1_score(test_labels_tta, weighted_predictions_co, average='weighted')
+        roc_auc_tta_co = roc_auc_score(test_labels_tta, weighted_predictions_co, average='weighted', multi_class='ovr')
+
+        # 4. TTAWCe-S (Weighted with Certainties)
+        weighted_predictions_ce = self.weighted_predictions_with_certainty(test_predictions_tta, test_uncertainties_tta)
+        accuracy_tta_ce = accuracy_score(test_labels_tta, weighted_predictions_ce)
+        f1_tta_ce = f1_score(test_labels_tta, weighted_predictions_ce, average='weighted')
+        roc_auc_tta_ce = roc_auc_score(test_labels_tta, weighted_predictions_ce, average='weighted', multi_class='ovr')
+
+        # 5. Ensembling (Simple)
+        ensembled_predictions = self.ensemble_predictions(test_predictions_tta)
+        accuracy_ensemble = accuracy_score(test_labels_tta, ensembled_predictions)
+        f1_ensemble = f1_score(test_labels_tta, ensembled_predictions, average='weighted')
+        roc_auc_ensemble = roc_auc_score(test_labels_tta, ensembled_predictions, average='weighted', multi_class='ovr')
+
+        # 6. Ensembling with Confidences
+        ensembled_predictions_co = self.ensemble_predictions_with_confidence(test_predictions_tta, test_confidences_tta)
+        accuracy_ensemble_co = accuracy_score(test_labels_tta, ensembled_predictions_co)
+        f1_ensemble_co = f1_score(test_labels_tta, ensembled_predictions_co, average='weighted')
+        roc_auc_ensemble_co = roc_auc_score(test_labels_tta, ensembled_predictions_co, average='weighted', multi_class='ovr')
+
+        # 7. Ensembling with Certainties
+        ensembled_predictions_ce = self.ensemble_predictions_with_certainty(test_predictions_tta, test_uncertainties_tta)
+        accuracy_ensemble_ce = accuracy_score(test_labels_tta, ensembled_predictions_ce)
+        f1_ensemble_ce = f1_score(test_labels_tta, ensembled_predictions_ce, average='weighted')
+        roc_auc_ensemble_ce = roc_auc_score(test_labels_tta, ensembled_predictions_ce, average='weighted', multi_class='ovr')
+
+        # 8. Ensembling with TTA
+        ensembled_tta_predictions = self.ensemble_tta_predictions(test_predictions_tta)
+        accuracy_ensemble_tta = accuracy_score(test_labels_tta, ensembled_tta_predictions)
+        f1_ensemble_tta = f1_score(test_labels_tta, ensembled_tta_predictions, average='weighted')
+        roc_auc_ensemble_tta = roc_auc_score(test_labels_tta, ensembled_tta_predictions, average='weighted', multi_class='ovr')
+
+        # Create a metrics comparison table
+        metrics_table = pd.DataFrame({
+            'Approach': ['Without TTA', 'TTAM', 'TTAWCo-S', 'TTAWCe-S', 'Ensembling (Simple)', 'Ensembling with Confidences', 'Ensembling with Certainties', 'Ensembling with TTA'],
+            'Accuracy': [accuracy_no_tta, accuracy_ttam, accuracy_tta_co, accuracy_tta_ce, accuracy_ensemble, accuracy_ensemble_co, accuracy_ensemble_ce, accuracy_ensemble_tta],
+            'F1 Score': [f1_no_tta, f1_ttam, f1_tta_co, f1_tta_ce, f1_ensemble, f1_ensemble_co, f1_ensemble_ce, f1_ensemble_tta],
+            'ROC-AUC': [roc_auc_no_tta, roc_auc_ttam, roc_auc_tta_co, roc_auc_tta_ce, roc_auc_ensemble, roc_auc_ensemble_co, roc_auc_ensemble_ce, roc_auc_ensemble_tta]
+        })
+
+        # Save the metrics table to a CSV file
+        metrics_table.to_csv(f"{self.config.model.name}_{self.config.dataset.seed}_metrics_comparison.csv", index=False)
+
+        # Print the metrics table
+        print(metrics_table)
+
+    def mode_based_tta(self, test_predictions_tta: torch.Tensor) -> np.ndarray:
+        """
+        Compute mode-based TTA predictions.
+
+        Args:
+            test_predictions_tta (torch.Tensor): Predictions with TTA.
+
+        Returns:
+            np.ndarray: Mode-based TTA predictions.
+        """
+        return torch.mode(test_predictions_tta, dim=0).values.cpu().numpy()
+
+    def weighted_predictions_with_confidence(self, test_predictions_tta: torch.Tensor, test_confidences_tta: torch.Tensor) -> np.ndarray:
+        """
+        Compute weighted predictions based on confidence.
+
+        Args:
+            test_predictions_tta (torch.Tensor): Predictions with TTA.
+            test_confidences_tta (torch.Tensor): Confidences with TTA.
+
+        Returns:
+            np.ndarray: Weighted predictions based on confidence.
+        """
+        weighted_predictions_co = test_predictions_tta
+        weighted_predictions_co[test_confidences_tta < 0.5] = -1  # Ignore low-confidence predictions
+        return weighted_predictions_co
+    
+    def weighted_predictions_with_certainty(self, test_predictions_tta: torch.Tensor, test_uncertainties_tta: torch.Tensor) -> np.ndarray:
+        """
+        Compute weighted predictions based on certainty.
+
+        Args:
+            test_predictions_tta (torch.Tensor): Predictions with TTA.
+            test_uncertainties_tta (torch.Tensor): Uncertainties with TTA.
+
+        Returns:
+            np.ndarray: Weighted predictions based on certainty.
+        """
+        weighted_predictions_ce = test_predictions_tta
+        weighted_predictions_ce[test_uncertainties_tta > 0.5] = -1  # Ignore high-uncertainty predictions
+        return weighted_predictions_ce
+
+    def ensemble_predictions(self, test_predictions_tta: torch.Tensor) -> np.ndarray:
+        """
+        Compute simple ensembled predictions.
+
+        Args:
+            test_predictions_tta (torch.Tensor): Predictions with TTA.
+
+        Returns:
+            np.ndarray: Ensembled predictions.
+        """
+        return test_predictions_tta.mean(dim=0).argmax(dim=1).cpu().numpy()
+
+    def ensemble_predictions_with_confidence(self, test_predictions_tta: torch.Tensor, test_confidences_tta: torch.Tensor) -> np.ndarray:
+        """
+        Compute ensembled predictions weighted by confidence.
+
+        Args:
+            test_predictions_tta (torch.Tensor): Predictions with TTA.
+            test_confidences_tta (torch.Tensor): Confidences with TTA.
+
+        Returns:
+            np.ndarray: Ensembled predictions weighted by confidence.
+        """
+        weighted_predictions = test_predictions_tta * test_confidences_tta.unsqueeze(1)
+        return weighted_predictions.sum(dim=0).argmax(dim=1).cpu().numpy()
+
+    def ensemble_predictions_with_certainty(self, test_predictions_tta: torch.Tensor, test_uncertainties_tta: torch.Tensor) -> np.ndarray:
+        """
+        Compute ensembled predictions weighted by certainty.
+
+        Args:
+            test_predictions_tta (torch.Tensor): Predictions with TTA.
+            test_uncertainties_tta (torch.Tensor): Certainties with TTA.
+
+        Returns:
+            np.ndarray: Ensembled predictions weighted by certainty.
+        """
+        weighted_predictions = test_predictions_tta * test_uncertainties_tta.unsqueeze(1)
+        return weighted_predictions.sum(dim=0).argmax(dim=1).cpu().numpy()
+
+    def ensemble_tta_predictions(self, test_predictions_tta: torch.Tensor) -> np.ndarray:
+        """
+        Compute ensembled predictions with TTA.
+
+        Args:
+            test_predictions_tta (torch.Tensor): Predictions with TTA.
+
+        Returns:
+            np.ndarray: Ensembled predictions with TTA.
+        """
+        return test_predictions_tta.mean(dim=0).argmax(dim=1).cpu().numpy()
+
+    def collect_predictions_no_tta(self) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Collect predictions without Test-Time Augmentation (TTA).
+
+        Returns:
+            tuple[torch.Tensor, torch.Tensor]: Predictions and labels without TTA.
+        """
         test_predictions_no_tta, test_labels_no_tta = [], []
         for batch in self.trainer.datamodule.test_dataloader():
             inputs, labels = batch
             inputs = inputs.to(self.device)
             outputs = self(inputs)
-            preds = torch.softmax(outputs[:, :self.config.model.num_classes], dim=1)
+
+            # Handle model output as in test_step
+            if self.config.model.loss_fun in ['TM+CE', 'CE']:
+                preds = torch.softmax(outputs[:, :self.config.model.num_classes], dim=1)
+            else:
+                preds = torch.softmax(outputs[:, :self.config.model.num_classes], dim=1)
+
             test_predictions_no_tta.append(preds)
             test_labels_no_tta.append(labels)
 
         test_predictions_no_tta = torch.cat(test_predictions_no_tta)
         test_labels_no_tta = torch.cat(test_labels_no_tta)
-        test_probs_no_tta = test_predictions_no_tta.squeeze().cpu()
+        return test_predictions_no_tta, test_labels_no_tta
+
+    def evaluate_no_tta(self, test_predictions_no_tta: torch.Tensor, test_labels_no_tta: torch.Tensor) -> None:
+        """
+        Evaluate predictions without TTA.
+
+        Args:
+            test_predictions_no_tta (torch.Tensor): Predictions without TTA.
+            test_labels_no_tta (torch.Tensor): True labels without TTA.
+        """
         test_predictions_no_tta = test_predictions_no_tta.argmax(dim=1).cpu()
         test_labels_no_tta = test_labels_no_tta.squeeze().cpu()
-        
-        print(f'Test labels no TTA shape: {test_labels_no_tta.shape}')
-        print(f'Test probs no TTA shape: {test_probs_no_tta.argmax(-1).shape}')
 
         accuracy_no_tta = accuracy_score(test_labels_no_tta, test_predictions_no_tta)
         f1_no_tta = f1_score(test_labels_no_tta, test_predictions_no_tta, average='weighted')
-        precision_no_tta = precision_score(test_labels_no_tta, test_predictions_no_tta, average='weighted')
-        recall_no_tta = recall_score(test_labels_no_tta, test_predictions_no_tta, average='weighted')
-        roc_auc_no_tta = roc_auc_score(test_labels_no_tta, test_probs_no_tta.argmax(-1), average='weighted', multi_class='ovr')
+        roc_auc_no_tta = roc_auc_score(test_labels_no_tta, test_predictions_no_tta, average='weighted', multi_class='ovr')
 
-        print(f'Metrics without TTA: Accuracy={accuracy_no_tta}, F1={f1_no_tta}, Precision={precision_no_tta}, Recall={recall_no_tta}, ROC-AUC={roc_auc_no_tta}')
+        print(f"Metrics without TTA: Accuracy={accuracy_no_tta}, F1={f1_no_tta}, ROC-AUC={roc_auc_no_tta}")
 
-        for _ in tqdm(range(num_tta), total=num_tta):
-            test_predictions, test_labels, test_certainties_s, test_confidences_s = [], [], [], []
-            for batch in self.trainer.datamodule.tta_dataloader():
+    def perform_tta_and_ensembling(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Perform Test-Time Augmentation (TTA) and ensembling.
+
+        Returns:
+            tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+                Ensembled predictions, labels, confidences, and uncertainties.
+        """
+        num_tta = self.config.dataset.num_tta
+        checkpoint_paths = list(self.config.model.checkpoint_path)
+
+        all_test_predictions_tta = []
+        all_test_labels_tta = []
+        all_test_confidences_tta = []
+        all_test_uncertainties_tta = []
+
+        for checkpoint_path in checkpoint_paths:
+            # Reinitialize the model and datamodule for each checkpoint
+            self.build_model()
+            self.load_state_dict(torch.load(checkpoint_path, weights_only=True)['state_dict'])
+            self.to(self.device)
+            self.eval()
+
+            datamodule = self.trainer.datamodule  # Reinitialize datamodule if needed
+            test_loader = datamodule.test_dataloader()
+
+            test_predictions_tta, test_labels_tta, test_confidences_tta, test_uncertainties_tta = self.collect_tta_predictions(self, test_loader, num_tta)
+            all_test_predictions_tta.append(test_predictions_tta)
+            all_test_labels_tta.append(test_labels_tta)
+            all_test_confidences_tta.append(test_confidences_tta)
+            all_test_uncertainties_tta.append(test_uncertainties_tta)
+
+        # Ensemble predictions
+        all_test_predictions_tta = torch.stack(all_test_predictions_tta).mean(dim=0)
+        all_test_labels_tta = torch.stack(all_test_labels_tta).mode(dim=0).values
+        all_test_confidences_tta = torch.stack(all_test_confidences_tta).mean(dim=0)
+        all_test_uncertainties_tta = torch.stack(all_test_uncertainties_tta).mean(dim=0)
+
+        return all_test_predictions_tta, all_test_labels_tta, all_test_confidences_tta, all_test_uncertainties_tta
+
+    def collect_tta_predictions(self, model: torch.nn.Module, test_loader: DataLoader, num_tta: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Collect predictions with Test-Time Augmentation (TTA) for a single checkpoint.
+
+        Args:
+            model (torch.nn.Module): The model to use for predictions.
+            test_loader (DataLoader): The test dataloader.
+            num_tta (int): Number of TTA iterations.
+
+        Returns:
+            tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+                Predictions, labels, confidences, and uncertainties with TTA.
+        """
+        test_predictions_tta = []
+        test_labels_tta = []
+        test_confidences_tta = []
+        test_uncertainties_tta = []
+
+        for _ in range(num_tta):
+            for batch in test_loader:
                 inputs, labels = batch
                 inputs = inputs.to(self.device)
-                outputs = self(inputs)
-                preds = torch.softmax(outputs[:, :self.config.model.num_classes], dim=1)
-                certainties_s = torch.exp(-outputs[:, self.config.model.num_classes:])
-                confidences_s = preds.max(dim=1).values
-                test_predictions.append(preds)
-                test_labels.append(labels)
-                test_certainties_s.append(certainties_s)
-                test_confidences_s.append(confidences_s)
+                outputs = model(inputs)
 
-            test_predictions = torch.cat(test_predictions)
-            test_labels = torch.cat(test_labels)
-            test_certainties_s = torch.cat(test_certainties_s)
-            test_confidences_s = torch.cat(test_confidences_s)
+                # Handle model output as in test_step
+                if self.config.model.loss_fun in ['TM+CE', 'CE']:
+                    preds = torch.softmax(outputs[:, :self.config.model.num_classes], dim=1)
+                else:
+                    preds = torch.softmax(outputs[:, :self.config.model.num_classes], dim=1)
 
-            test_predictions_tta.append(test_predictions)
-            test_labels_tta.append(test_labels)
-            test_certainties_s_tta.append(test_certainties_s)
-            test_confidences_s_tta.append(test_confidences_s)
+                confidences = preds.max(dim=1).values
+                uncertainties = outputs[:, -1] if self.config.model.loss_fun in ['UANLL', 'TM+UANLL'] else torch.zeros_like(confidences)
 
-        print('Collecting and logging metrics')
+                test_predictions_tta.append(preds)
+                test_labels_tta.append(labels)
+                test_confidences_tta.append(confidences)
+                test_uncertainties_tta.append(uncertainties)
 
-        test_predictions_tta = torch.stack(test_predictions_tta).mean(dim=0)
-        test_labels_tta = torch.stack(test_labels_tta).mode(dim=0).values
-        test_certainties_s_tta = torch.stack(test_certainties_s_tta).mean(dim=0)
-        test_confidences_s_tta = torch.stack(test_confidences_s_tta).mean(dim=0)
-        test_probs_tta = test_predictions_tta.squeeze().cpu()
+        test_predictions_tta = torch.cat(test_predictions_tta)
+        test_labels_tta = torch.cat(test_labels_tta)
+        test_confidences_tta = torch.cat(test_confidences_tta)
+        test_uncertainties_tta = torch.cat(test_uncertainties_tta)
+
+        return test_predictions_tta, test_labels_tta, test_confidences_tta, test_uncertainties_tta
+
+    def evaluate_with_tta(self, test_predictions_tta: torch.Tensor, test_labels_tta: torch.Tensor) -> None:
+        """
+        Evaluate predictions with TTA and ensembling.
+
+        Args:
+            test_predictions_tta (torch.Tensor): Predictions with TTA.
+            test_labels_tta (torch.Tensor): True labels with TTA.
+        """
+        print(test_predictions_tta)
         test_predictions_tta = test_predictions_tta.argmax(dim=1).cpu()
         test_labels_tta = test_labels_tta.squeeze().cpu()
 
-        accuracy = accuracy_score(test_labels_tta, test_predictions_tta)
-        f1 = f1_score(test_labels_tta, test_predictions_tta, average='weighted')
-        precision = precision_score(test_labels_tta, test_predictions_tta, average='weighted')
-        recall = recall_score(test_labels_tta, test_predictions_tta, average='weighted')
-        roc_auc = roc_auc_score(test_labels_tta, test_probs_tta.argmax(-1), average='weighted', multi_class='ovr')
+        accuracy_tta = accuracy_score(test_labels_tta, test_predictions_tta)
+        f1_tta = f1_score(test_labels_tta, test_predictions_tta, average='weighted')
+        roc_auc_tta = roc_auc_score(test_labels_tta, test_predictions_tta, average='weighted', multi_class='ovr')
 
-        print(f'Metrics with TTA: Accuracy={accuracy}, F1={f1}, Precision={precision}, Recall={recall}, ROC-AUC={roc_auc}')
+        print(f"Metrics with TTA: Accuracy={accuracy_tta}, F1={f1_tta}, ROC-AUC={roc_auc_tta}")
 
-        self.logger.log_metrics({
-            'accuracy': accuracy,
-            'f1': f1,
-            'precision': precision,
-            'recall': recall,
-            'roc_auc': roc_auc
+    def save_predictions_to_csv(self, test_predictions_no_tta: torch.Tensor, test_labels_no_tta: torch.Tensor, test_predictions_tta: torch.Tensor, test_labels_tta: torch.Tensor, test_confidences_tta: torch.Tensor, test_uncertainties_tta: torch.Tensor) -> None:
+        """
+        Save predictions (without TTA and with TTA) to CSV files.
+
+        Args:
+            test_predictions_no_tta (torch.Tensor): Predictions without TTA.
+            test_labels_no_tta (torch.Tensor): True labels without TTA.
+            test_predictions_tta (torch.Tensor): Predictions with TTA.
+            test_labels_tta (torch.Tensor): True labels with TTA.
+            test_confidences_tta (torch.Tensor): Confidences with TTA.
+            test_uncertainties_tta (torch.Tensor): Uncertainties with TTA.
+        """
+        # Save predictions without TTA
+        no_tta_df = pd.DataFrame({
+            'true_labels': test_labels_no_tta.tolist(),
+            'predictions': test_predictions_no_tta.argmax(dim=1).tolist()
         })
+        no_tta_df.to_csv(f"{self.config.model.name}_{self.config.dataset.seed}_predictions_no_tta.csv", index=False)
 
-        predictions_df = pd.DataFrame({
+        # Save predictions with TTA
+        tta_df = pd.DataFrame({
             'true_labels': test_labels_tta.tolist(),
-            'predictions': test_predictions_tta.tolist(),
-            'probabilities': test_probs_tta.tolist(),
-            'certainties_s': test_certainties_s_tta.cpu().tolist(),
-            'confidences_s': test_confidences_s_tta.cpu().tolist()
+            'predictions': test_predictions_tta.argmax(dim=1).tolist(),
+            'confidences': test_confidences_tta.tolist(),
+            'uncertainties': test_uncertainties_tta.tolist()
         })
-        predictions_df.to_csv(f"{self.config.model.name}_predictions.csv", index=False)
+        tta_df.to_csv(f"{self.config.model.name}_{self.config.dataset.seed}_predictions_tta.csv", index=False)
 
-        print('Performing visualization...')
+    def handle_weighted_predictions(self, test_predictions_tta: torch.Tensor, test_labels_tta: torch.Tensor, test_confidences_tta: torch.Tensor, test_uncertainties_tta: torch.Tensor) -> None:
+        """
+        Handle weighted predictions based on confidence and certainty.
 
-        cm = confusion_matrix(test_labels_tta, test_predictions_tta)
-        cm_display = ConfusionMatrixDisplay(cm, display_labels=self.config.dataset.class_names).plot()
-        cm_display.ax_.set_title(f'TTA predictions {self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}')
-        plt.savefig(f"{self.config.model.name}_{self.config.dataset.seed}_confusion_matrix.png")
+        Args:
+            test_predictions_tta (torch.Tensor): Predictions with TTA.
+            test_labels_tta (torch.Tensor): True labels with TTA.
+            test_confidences_tta (torch.Tensor): Confidences with TTA.
+            test_uncertainties_tta (torch.Tensor): Uncertainties with TTA.
+        """
+        # Weighted predictions based on confidence
+        weighted_predictions_co = test_predictions_tta.argmax(dim=1)
+        weighted_predictions_co[test_confidences_tta < 0.5] = -1  # Example: Ignore low-confidence predictions
 
-        test_attr_tta = test_vis_tta(self,
-                                    self.trainer.datamodule.test_dataloader(),
-                                    num_classes=self.config.model.num_classes,
-                                    loss_fun=self.config.model.loss_fun,
-                                    seed=self.config.dataset.seed,
-                                    figs=1,
-                                    numTTA=self.config.dataset.num_tta)
+        # Weighted predictions based on certainty
+        weighted_predictions_ce = test_predictions_tta.argmax(dim=1)
+        weighted_predictions_ce[test_uncertainties_tta > 0.5] = -1  # Example: Ignore high-uncertainty predictions
 
-        mode_labels = torch.mode(test_attr_tta['labels_tta'], dim=0).values
-        mode_predictions = torch.mode(test_attr_tta['predictions_tta'], dim=0).values
-        mode_confidences_s_tta = torch.mode(test_attr_tta['confidences_s_tta'], dim=0).values
-        mode_certainties_s_tta = torch.mode(test_attr_tta['certainties_s_tta'], dim=0).values
+        # Evaluate weighted predictions
+        self.evaluate_weighted_predictions(weighted_predictions_co, weighted_predictions_ce, test_labels_tta)
 
-        true_pred = (mode_labels == mode_predictions).tolist()
-        df = pd.DataFrame({
-            'Mode_label_tta': mode_labels,
-            'Mode_prediction_tta': mode_predictions,
-            'Mode_confidence_(soft)': mode_confidences_s_tta,
-            'Mode_certainty_(soft)': mode_certainties_s_tta,
-            'True or false prediction': true_pred
-        })
+    def evaluate_weighted_predictions(self, weighted_predictions_co: torch.Tensor, weighted_predictions_ce: torch.Tensor, test_labels_tta: torch.Tensor) -> None:
+        """
+        Evaluate weighted predictions based on confidence and certainty.
 
-        name = f'{self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}'
-        hist(df, 'Mode_confidence_(soft)', (4, 4), name=f'{name} Mode Confidence (soft)')
-        hist(df, 'Mode_certainty_(soft)', (4, 4), name=f'{name} Mode Certainty (soft)')
+        Args:
+            weighted_predictions_co (torch.Tensor): Weighted predictions based on confidence.
+            weighted_predictions_ce (torch.Tensor): Weighted predictions based on certainty.
+            test_labels_tta (torch.Tensor): True labels with TTA.
+        """
+        # Filter out ignored predictions
+        valid_indices_co = weighted_predictions_co != -1
+        valid_indices_ce = weighted_predictions_ce != -1
+        
+        valid_indices_ce = valid_indices_ce.cpu().numpy()
+        valid_indices_co = valid_indices_co.cpu().numpy()
+        
+        test_labels_tta = test_labels_tta.cpu().numpy()
+        weighted_predictions_co = weighted_predictions_co.cpu().numpy()
+        weighted_predictions_ce = weighted_predictions_ce.cpu().numpy()
 
-        cm = confusion_matrix(mode_labels.cpu(), mode_predictions.cpu())
-        print('Mode based TTA predictions (TTAM)')
-        cm_display = ConfusionMatrixDisplay(cm, display_labels=self.config.dataset.class_names).plot()
-        cm_display.ax_.set_title(f'Mode based TTA predictions (TTAM) {self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}')
-        plt.savefig(f"{self.config.model.name}_{self.config.dataset.seed}_mode_confusion_matrix.png")
+        # Evaluate confidence-weighted predictions
+        accuracy_co = accuracy_score(test_labels_tta[valid_indices_co], weighted_predictions_co[valid_indices_co])
+        f1_co = f1_score(test_labels_tta[valid_indices_co], weighted_predictions_co[valid_indices_co], average='weighted')
+        roc_auc_co = roc_auc_score(test_labels_tta[valid_indices_co], weighted_predictions_co[valid_indices_co], average='weighted', multi_class='ovr')
 
-        print('Calculating weighted predictions...')
+        # Evaluate certainty-weighted predictions
+        accuracy_ce = accuracy_score(test_labels_tta[valid_indices_ce], weighted_predictions_ce[valid_indices_ce])
+        f1_ce = f1_score(test_labels_tta[valid_indices_ce], weighted_predictions_ce[valid_indices_ce], average='weighted')
+        roc_auc_ce = roc_auc_score(test_labels_tta[valid_indices_ce], weighted_predictions_ce[valid_indices_ce], average='weighted', multi_class='ovr')
 
-        weightedPred = ttaWeightedPred(test_attr_tta['labels_tta'], test_attr_tta['predictions_tta'], test_attr_tta['confidences_s_tta'], test_attr_tta['certainties_s_tta'], class_names=self.config.dataset.class_names)
-        n_correct_TTAWCo_S = (weightedPred['predictionsCo'] == mode_labels).sum().item()
-        n_correct_TTAWCe_S = (weightedPred['predictionsCe'] == mode_labels).sum().item()
-
-        n_samples = mode_labels.shape[0]
-        accuracy_TTAWCo_S = n_correct_TTAWCo_S / n_samples
-        accuracy_TTAWCe_S = n_correct_TTAWCe_S / n_samples
-
-        print('---------------------- Soft TTA predictions -----------------------------')
-        print('n_samples', n_samples)
-        print(f'accuracy of confidences based soft TTA predictions = {accuracy_TTAWCo_S}')
-        print(f'accuracy of certainties based soft TTA predictions = {accuracy_TTAWCe_S}')
-
-        cm = confusion_matrix(mode_labels.cpu(), weightedPred['predictionsCo'].cpu())
-        print('Confidence based soft TTA predictions (TTAWCo-S)')
-        cm_display = ConfusionMatrixDisplay(cm, display_labels=self.config.dataset.class_names).plot()
-        cm_display.ax_.set_title(f'Confidence based soft TTA predictions (TTAWCo-S) {self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}')
-        plt.savefig(f"{self.config.model.name}_{self.config.dataset.seed}_confidence_confusion_matrix.png")
-
-        cm = confusion_matrix(mode_labels.cpu(), weightedPred['predictionsCe'].cpu())
-        print('Certainty based soft TTA predictions (TTAWCe-S)')
-        cm_display = ConfusionMatrixDisplay(cm, display_labels=self.config.dataset.class_names).plot()
-        cm_display.ax_.set_title(f'Certainty based soft TTA predictions (TTAWCe-S) {self.config.model.name}_{self.config.dataset.seed}_{self.config.dataset.bagging_size}')
-        plt.savefig(f"{self.config.model.name}_{self.config.dataset.seed}_certainty_confusion_matrix.png")
-
-        # Summary table
-        test_accuracy_summary = {
-            'ID': self.logger._task.id,
-            'dataset': self.config.dataset.name,
-            'loss_fun': self.config.model.loss_fun,
-            'margin': self.config.model.margin,
-            'weight_decay': self.config.model.optimizer_hparams.weight_decay,
-            'label_smoothing': self.config.model.label_smoothing,
-            'bagging_size': self.config.dataset.bagging_size,
-            'seed': self.config.dataset.seed,
-            '# samples': len(test_labels_tta),
-            '# TTA': self.config.dataset.num_tta,
-            'F1 (without TTA)': f1_no_tta,
-            'ROCAUC (without TTA)': roc_auc_no_tta,
-            'Acc (without TTA)': accuracy_no_tta,
-            'F1 TTA': f1,
-            'ROCAUC': roc_auc,
-            'Acc TTAM': accuracy_tta(mode_labels, mode_predictions)['acc_without_u'],
-            'Acc TTAWCo-S': accuracy_TTAWCo_S,
-            'Acc TTAWCe-S': accuracy_TTAWCe_S,
-            'ECE': calculate_ece(test_probs_tta, test_labels_tta, num_classes=self.config.model.num_classes)
-        }
-
-        summary_df = pd.DataFrame([test_accuracy_summary])
-        summary_df.to_csv(f"{self.config.model.name}_{self.config.dataset.seed}_summary.csv", index=False)
+        print(f"Confidence-Weighted Metrics: Accuracy={accuracy_co}, F1={f1_co}, ROC-AUC={roc_auc_co}")
+        print(f"Certainty-Weighted Metrics: Accuracy={accuracy_ce}, F1={f1_ce}, ROC-AUC={roc_auc_ce}")

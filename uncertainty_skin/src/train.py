@@ -18,9 +18,9 @@ from src.utils.utils import extract_features
 
 def create_model(config):
     if config.model.name == 'CNN':
-        model = CNN(config).to(config.device)
+        model = CNN(config)
     elif config.model.name in config.timm_models:
-        model = TimmModel(config).to(config.device)
+        model = TimmModel(config)
     else:
         raise ValueError(f"Unknown model: {config.model.name}")
     return model

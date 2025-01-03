@@ -2,7 +2,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
-from data.dataset import CustomImageDataset, ClassDataset
+from src.data.dataset import CustomImageDataset, ClassDataset
 import torch
 from torch.utils.data import WeightedRandomSampler
 from PIL import Image

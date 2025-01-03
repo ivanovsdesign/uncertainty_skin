@@ -77,8 +77,8 @@ def train(config: DictConfig,
     print(f'Model trained on seed {seed} saved')
     os.environ['TRAINED_MODEL'] = save_path
 
-    with open(f'{os.path.join(os.getcwd(), 'trained_paths.csv')}', 'a') as file:
-        file.write(f'{seed}, {config.model.name}, {trainer.checkpoint_callback.best_model_path}\n')
+    #with open(f'{os.path.join(os.getcwd(), 'trained_paths.csv')}', 'a') as file:
+    #    file.write(f'{seed}, {config.model.name}, {trainer.checkpoint_callback.best_model_path}\n')
 
     original_dir = get_original_cwd()
     os.makedirs(os.path.join(original_dir, 'checkpoints'), exist_ok=True)

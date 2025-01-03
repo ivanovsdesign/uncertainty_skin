@@ -11,3 +11,4 @@ seaborn==0.13.2
 pytorch_metric_learning==2.7.0
 python-dotenv==1.0.1
 ttach==0.0.3
+opencv-python

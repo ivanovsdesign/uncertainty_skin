@@ -2,7 +2,7 @@ import hydra
 from hydra.utils import get_original_cwd
 from omegaconf import DictConfig
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
+from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint, EarlyStopping
 from src.data.datamodule import ISICDataModule, ChestDataModule
 from src.models.cnn_model import CNN
 from src.models.timm_model import TimmModel
@@ -56,8 +56,16 @@ def train(config: DictConfig,
         filename=f'{model_slug}_' + '{epoch}'
     )
 
+    early_stopping_callback = EarlyStopping(
+        monitor='val_loss',  # Metric to monitor
+        patience=5,          # Number of epochs with no improvement after which training will be stopped
+        verbose=True,        # Print messages when stopping
+        mode='min'          # Mode can be 'min', 'max', or 'auto'
+    )
+
     callbacks = [
         checkpoint_callback,
+        early_stopping_callback,
         LearningRateMonitor("epoch")
     ]
 

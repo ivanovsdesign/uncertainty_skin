@@ -35,7 +35,7 @@ def train(config: DictConfig,
     
     config.dataset.seed = seed
     
-    model_slug = f'{config.model.name}_{seed}_{config.model.loss_fun}_{unique_id}'
+    model_slug = f'{config.model.name}_{seed}_{config.model.loss_fun}_{unique_id}_noise_{config.dataset.noise}'
 
     os.makedirs('checkpoints', exist_ok=True)
 
